@@ -116,31 +116,47 @@ SUBROUTINE CONVERTAtomName2Number(name, number, IErr)
   IMPLICIT NONE
   
   INTEGER IErr, ind, number
-  CHARACTER*2 name
+  CHARACTER*5 name
 
+!!$  INTEGER, PARAMETER :: NElements=150
   INTEGER, PARAMETER :: NElements=103
 
   CHARACTER*2 A(NElements)
-
+  
   DATA A/" H", "He", "Li", "Be", " B", " C", " N", "O", "F", "Ne", &
-        "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca", &
-        "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", &
-        "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb", "Sr", "Y", "Zr", &
-        "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In", "Sn", &
-        "Sb", "Te", "I", "Xe", "Cs", "Ba", "La", "Ce", "Pr", "Nd", &
-        "Pm", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho", "Er", "Tm", "Yb", &
-        "Lu", "Hf", "Ta", "W", "Re", "Os", "Ir", "Pt", "Au", "Hg", &
-        "Tl", "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra", "Ac", "Th", &
-        "Pa", "U", "Np", "Pu", "Am", "Cm", "Bk", "Cf", "Es", "Fm",& 
-        "Md","No","Lr"/
-
+       "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca", &
+       "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", &
+       "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb", "Sr", "Y", "Zr", &
+       "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In", "Sn", &
+       "Sb", "Te", "I", "Xe", "Cs", "Ba", "La", "Ce", "Pr", "Nd", &
+       "Pm", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho", "Er", "Tm", "Yb", &
+       "Lu", "Hf", "Ta", "W", "Re", "Os", "Ir", "Pt", "Au", "Hg", &
+       "Tl", "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra", "Ac", "Th", &
+       "Pa", "U", "Np", "Pu", "Am", "Cm", "Bk", "Cf", "Es", "Fm",& 
+       "Md","No","Lr"/
+  
+!!$  CHARACTER*5 A(NElements)
+!!$  
+!!$  DATA A/"He","Li","Li+","Be","Be2+","B","C","N","O","O2-","F","F-","Ne",&
+!!$       "Na","Na1+","Mg","Mg2","+","AI","AI3+","Si","P","S","C","C1-","Ar","K",&
+!!$       "K+","Ca","Ca2+","Sc","Sc3+","Ti","Ti4+","V","V5+","Cr","Cr4+","Mn",&
+!!$       "Mn2+","Fe","Fe2+","Co","Co2+","Ni","Ni2+","Cu","Cu2+","Zn","Zn2+",&
+!!$       "Ga","Ge","As","Se","Br","Br-","Kr","Rb","Rb+","Sr","Sr2+","Y","Y3+",&
+!!$       "Zr","Zr4+","Nb","Nb5+","Mo","Mo6+","Tc","Ru","Rh","Pd","Pd2+","Ag","Ag2+",&
+!!$       "Cd","Cd2+","In","Sn","Sb","Te","I","I-","Xe","Cs","Cs+","Ba","Ba2+",&
+!!$       "La","La3+","Ce","Ce4+","Pr","Pr3+","Nd","Nd3+","Pm","Sm","Sm3+","Eu","Eu3+",&
+!!$       "Gd","Gd3+","Tb","Tb3+","Dy","Dy3+","Ho","Ho3+","Er","Er3+","Tm","Tm3+",&
+!!$       "Yb","Yb3+","Lu","Lu3+","Hf","Ta","W","Re","Os","Ir","Pt","Au","Hg","T",&
+!!$       "Pb","Bi","Po","At","Rn","Fr","Ra","Ac","Th","Pa","U", "Np", "Pu", "Am", &
+!!$       "Cm", "Bk", "Cf", "Es", "Fm","Md","No","Lr"/
+!!$  
   DO ind=1,NElements
      IF(TRIM(name)==TRIM(A(ind))) THEN
         number= ind
         IF((IWriteFLAG.EQ.6.AND.my_rank.EQ.0).OR.IWriteFLAG.GE.10) THEN
            PRINT*,"DBG: name, number ", name, number
         END IF
-           RETURN
+        RETURN
      ENDIF
   ENDDO
 

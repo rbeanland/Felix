@@ -247,12 +247,15 @@ SUBROUTINE InpCIF(IErr)
      IF(loop_ .NEQV. .TRUE.) EXIT
   ENDDO
 
+  
+  CALL CifReset
+
   ! Extract space group notation (expected char string)
   f1 = char_('_symmetry_space_group_name_H-M', name)
   IF((IWriteFLAG.GE.1.AND.my_rank.EQ.0).OR.IWriteFLAG.GE.10) THEN
      PRINT*,"Space Group = ",name
   END IF
-  IF (SCAN(name,'abcdefghijklmnopqrstuvwxyz').EQ.0) THEN
+  IF (SCAN(name,'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ').EQ.0) THEN
      f1 = char_('_symmetry_space_group_name_Hall',name)
      IF (SCAN(name,'abcdefghijklmnopqrstuvwxyz').EQ.0) THEN
         f1 = numb_('_symmetry_Int_tables_number',numb,sx)
@@ -354,13 +357,17 @@ SUBROUTINE InpCIF(IErr)
 
   ! actual data loop
 
+  CALL cifreset
+
   ITotalAtoms=0
   DO ind=1,IAtomCount
    
-     f1 = char_('_atom_site_label', name)
-     SAtomName(ind)=name(1:2)
+     f1 = char_('_atom_site_type_symbol', name)
+      PRINT*,name
+      SAtomName(ind)=name(1:2)
+      PRINT*,SAtomName(ind)
      ! remove the oxcidation state numbers
-     Ipos=SCAN(SAtomName(ind),"1234567890")
+    Ipos=SCAN(SAtomName(ind),"1234567890")
 
      IF(Ipos>0) THEN
         WRITE(SAtomName(ind),'(A1,A1)') name(1:1)," "

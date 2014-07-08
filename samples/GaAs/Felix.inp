@@ -12,20 +12,20 @@ IBinorTextFLAG            = 0
 IScatterFactorMethodFLAG  = 0
 ICentralBeamFLAG          = 1
 IMaskFLAG                 = 0
-IZolzFLAG                 = 1
-IAbsorbFLAG               = 0
+IZolzFLAG                 = 0
+IAbsorbFLAG               = 1
 IAnisoDebyeWallerFlag     = 0
 IBeamConvergenceFLAG      = 1
 IPseudoCubicFLAG          = 0
-IXDirectionFLAG           = 0
+IXDirectionFLAG           = 1
 IDevFLAG                  = 0
 
 # radius of the beam in pixels
-IPixelCount               = 64
+IPixelCount               = 128
 
 # beam selection criteria
 IMinReflectionPool        = 600
-IMinStrongBeams           = 25
+IMinStrongBeams           = 100
 IMinWeakBeams             = 20
 RBSBMax                   = 0.1
 RBSPMax                   = 0.1
@@ -41,8 +41,8 @@ IIncidentBeamDirectionX   = 1
 IIncidentBeamDirectionY   = 1 
 IIncidentBeamDirectionZ   = 0
 IXDirectionX              = 0
-IXDirectionY              = -1
-IXDirectionZ              = 1
+IXDirectionY              = 0
+IXDirectionZ              = 2
 INormalDirectionX         = 1
 INormalDirectionY         = 1
 INormalDirectionZ         = 0 
@@ -62,4 +62,4 @@ IImageOutputFLAG          = 1
 RInitialThickness        = 870.0
 RFinalThickness          = 870.0
 RDeltaThickness          = 10.0
-IReflectOut              = 37
+IReflectOut              = 17

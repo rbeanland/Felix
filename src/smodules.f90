@@ -397,8 +397,10 @@ MODULE SPara
   CHARACTER*2, DIMENSION(:), ALLOCATABLE :: &
        SFullAtomicNameVec
   
+  CHARACTER*5, DIMENSION(:), ALLOCATABLE :: &
+       SAtomName
   CHARACTER*2, DIMENSION(:), ALLOCATABLE :: &
-       SAtomName, SMNP
+       SMNP
   
 END MODULE SPara
 

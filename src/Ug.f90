@@ -181,9 +181,36 @@ SUBROUTINE UgCalculation (IErr)
                    RScattFactors(currentatom,9) * &
                    EXP(-RgMatMag(ind,jnd)**2 * RScattFactors(currentatom,10)) + &
                    RScattFactors(currentatom,11) * &
-                   EXP(-RgMatMag(ind,jnd)**2 * RScattFactors(currentatom,12))
+                   EXP(-RgMatMag(ind,jnd)**2 * RScattFactors(currentatom,12));
+
+  
               
-           CASE(1) ! 8 Parameter Method with Scattering Parameters from Peng et al 1996 
+           !CASE(1) ! 8 Parameter Method with Scattering Parameters from Peng et al 1996 
+           !   RAtomicFormFactor = &
+           !        RScattFactors(currentatom,1) * &
+           !        EXP(-(RgMatMag(ind,jnd)**2)/4 * RScattFactors(currentatom,5)) + &
+           !        RScattFactors(currentatom,2) * &
+           !        EXP(-(RgMatMag(ind,jnd)**2)/4 * RScattFactors(currentatom,6)) + &
+           !        RScattFactors(currentatom,3) * &
+           !        EXP(-(RgMatMag(ind,jnd)**2)/4 * RScattFactors(currentatom,7)) + &
+          !        RScattFactors(currentatom,4) * &
+          !         EXP(-(RgMatMag(ind,jnd)**2)/4 * RScattFactors(currentatom,8))
+!
+ !          CASE(2) ! 8 Parameter Method with Scattering Parameters from Doyle and Turner Method (1968)
+!
+ !             RAtomicFormFactor = &
+  !                 RScattFactors(currentatom,1) * &
+   !                EXP(-(RgMatMag(ind,jnd)**2)/4 * RScattFactors(currentatom,2)) + &
+    !               RScattFactors(currentatom,3) * &
+     !              EXP(-(RgMatMag(ind,jnd)**2)/4 * RScattFactors(currentatom,4)) + &
+      !             RScattFactors(currentatom,5) * &
+       !            EXP(-(RgMatMag(ind,jnd)**2)/4 * RScattFactors(currentatom,6)) + &
+        !           RScattFactors(currentatom,7) * &
+         !          EXP(-(RgMatMag(ind,jnd)**2)/4 * RScattFactors(currentatom,8))
+
+  
+              
+           CASE DEFAULT ! 8 Parameter Method  
               RAtomicFormFactor = &
                    RScattFactors(currentatom,1) * &
                    EXP(-(RgMatMag(ind,jnd)**2)/4 * RScattFactors(currentatom,5)) + &
@@ -193,19 +220,7 @@ SUBROUTINE UgCalculation (IErr)
                    EXP(-(RgMatMag(ind,jnd)**2)/4 * RScattFactors(currentatom,7)) + &
                    RScattFactors(currentatom,4) * &
                    EXP(-(RgMatMag(ind,jnd)**2)/4 * RScattFactors(currentatom,8))
-
-           CASE(2) ! 8 Parameter Method with Scattering Parameters from Doyle and Turner Method (1968)
-
-              RAtomicFormFactor = &
-                   RScattFactors(currentatom,1) * &
-                   EXP(-(RgMatMag(ind,jnd)**2)/4 * RScattFactors(currentatom,2)) + &
-                   RScattFactors(currentatom,3) * &
-                   EXP(-(RgMatMag(ind,jnd)**2)/4 * RScattFactors(currentatom,4)) + &
-                   RScattFactors(currentatom,5) * &
-                   EXP(-(RgMatMag(ind,jnd)**2)/4 * RScattFactors(currentatom,6)) + &
-                   RScattFactors(currentatom,7) * &
-                   EXP(-(RgMatMag(ind,jnd)**2)/4 * RScattFactors(currentatom,8))
-
+!
            END SELECT
               
           ! initialize potential as in Eq. (6.10) of Kirkland
@@ -291,6 +306,7 @@ SUBROUTINE UgCalculation (IErr)
 !!$        PRINT*,CUgMat(ind,:4)
 !!$     END DO
 !!$  END IF
+  
 END SUBROUTINE UgCalculation
 
 SUBROUTINE UgAddAbsorption(IErr)         
@@ -306,10 +322,26 @@ SUBROUTINE UgAddAbsorption(IErr)
   
   IMPLICIT NONE 
   
-  INTEGER(IKIND) IErr
+  INTEGER(IKIND) IErr,ind
+
+  REAL(RKIND) :: &
+       RMeanInnerPotentialVolts  
+
+  RMeanInnerPotentialVolts = ((RMeanInnerCrystalPotential*RPlanckConstant**2)/ &
+       (TWO*RElectronMass*RElectronCharge*TWOPI**2))*&
+       RAngstromConversion*RAngstromConversion
 
   CUgMatPrime = CZERO
 
   CUgMatPrime = CUgMatPrime+REAL(CUgMat)*(RAbsorptionPercentage/100.D0)*CIMAGONE
+
+  DO ind=1,nReflections
+     CUgMatPrime(ind,ind)=RMeanInnerCrystalPotential*(RAbsorptionPercentage/100.D0)*CIMAGONE
+  ENDDO
+  
+  IF((IWriteFLAG.GE.2.AND.my_rank.EQ.0).OR.IWriteFLAG.GE.10) THEN
+     PRINT*,"UgCalculation(",my_rank,") RMeanInnerCrystalPotential = ",&
+          RMeanInnerPotentialVolts,RMeanInnerPotentialVolts*(RAbsorptionPercentage/100.D0)*CIMAGONE
+  END IF
   
 END SUBROUTINE UgAddAbsorption

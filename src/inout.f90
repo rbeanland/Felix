@@ -551,7 +551,7 @@ SUBROUTINE InputScatteringFactors( IErr )
   ENDDO
 100 ILength=ILine
   
-  IF(IWriteFLAG.GE.10) THEN
+  IF(IWriteFLAG.GE.0) THEN
      
      PRINT*,"InputScatteringFactors(): ILength=", ILength
      
@@ -602,10 +602,11 @@ SUBROUTINE InputScatteringFactors( IErr )
         PRINT*,"InputScatteringFactors(): error in memory ALLOCATE()"
         RETURN
      ENDIF
-     
+
      DO ILine=1,ILength,1
-        READ(UNIT= IChInp, FMT='(21(E15.11,1X))') &
-             rdummy(:), RScattFactors(ILine,:)     
+      PRINT*,"Iline = ",ILine
+        READ(UNIT= IChInp, FMT='(9(E15.11,1X))') &
+             rdummy, RScattFactors(ILine,:)     
         !PRINT*,rdummy, RScattFactors(ILine,:)
      ENDDO
 
@@ -613,6 +614,28 @@ SUBROUTINE InputScatteringFactors( IErr )
 
      ALLOCATE( &
           rdummy(21),&
+          STAT=IErr)
+     IF( IErr.NE.0 ) THEN
+        PRINT*,"InputScatteringFactors(): error in memory ALLOCATE()"
+        RETURN
+     ENDIF
+
+     ALLOCATE(RScattFactors(ILength,8), STAT=IErr)
+     IF( IErr.NE.0 ) THEN
+        PRINT*,"InputScatteringFactors(): error in memory ALLOCATE()"
+        RETURN
+     ENDIF
+     
+     DO ILine=1,ILength,1
+        READ(UNIT= IChInp, FMT='(21(E15.11,1X))') &
+             rdummy(:), RScattFactors(ILine,:)     
+        !PRINT*,rdummy, RScattFactors(ILine,:)
+     ENDDO
+
+  CASE(3)
+
+     ALLOCATE( &
+          rdummy(29),&
           STAT=IErr)
      IF( IErr.NE.0 ) THEN
         PRINT*,"InputScatteringFactors(): error in memory ALLOCATE()"

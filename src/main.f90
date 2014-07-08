@@ -403,6 +403,23 @@ PROGRAM FelixSim
      CUgMat =  CUgMat+CUgMatPrime
   end IF
 
+  
+  IF((IWriteFLAG.GE.7.AND.my_rank.EQ.0).OR.IWriteFLAG.GE.10) THEN
+     DO ind = 1,50
+        PRINT*,(((REAL(CUgMat(ind,1))*RPlanckConstant**2)/ &
+             (TWO*RElectronMass*RElectronCharge*TWOPI**2))*&
+             RAngstromConversion*RAngstromConversion),&
+             ((REAL(AIMAG(CUgMat(ind,1)))*RPlanckConstant**2)/ &
+             (TWO*RElectronMass*RElectronCharge*TWOPI**2))*&
+             RAngstromConversion*RAngstromConversion
+     END DO
+  END IF
+
+
+
+
+
+
   !!$ ! UgMatEffective
   IF(IOutputFLAG.GE.2) THEN
      CALL WriteDataC_MPI(IChOutUM_MPI, ind,jnd, &
