@@ -64,7 +64,7 @@ SUBROUTINE MicroscopySettings( IErr )
        ( SQRT(2.0D0*RElectronMass*RElectronCharge*RAcceleratingVoltage*1.D3) * &
          SQRT(1.0D0 + (RElectronCharge*RAcceleratingVoltage*1.D3) / &
           (2.D0*RElectronMass*RSpeedOfLight**2) &
-       )) * RAngstromConversion
+       ))
 
   RElectronWaveVectorMagnitude=TWOPI/RElectronWaveLength
 

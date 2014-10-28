@@ -2160,7 +2160,7 @@ SUBROUTINE ReadInHKLs(IErr)
      PRINT*,"ReadInHKLs(",my_rank,")"
   END IF
 
-  OPEN(Unit = IChInp,FILE="Felix.hkl",&
+  OPEN(Unit = IChInp,FILE="felix.hkl",&
        STATUS='OLD',ERR=10)
 
   IF((my_rank.EQ.0.AND.IWriteFLAG.GE.2).OR.IWriteFLAG.GE.10) THEN

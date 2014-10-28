@@ -91,15 +91,17 @@ END MODULE IConst
 
 !--------------------------------------------------------------------
 MODULE RConst
+
   USE MyNumbers
   
   REAL(RKIND), PARAMETER :: &
        RSpeedOfLight=2.99762458D+8, &
        RElectronMass=9.10938291D-31, &
        RElectronMassMeV=0.510998928, &
-       RPlanckConstant=6.62606957D-34, &
+       RPlanckConstant=6.62606957D-24, &
        RElectronCharge=1.602176565D-19, &
-       RAngstromConversion=1.D10
+       RAngstromConversion=1.D10,&
+       RPlanckConstantBar=1.054571726D-24
     
 END MODULE RConst
 
@@ -335,10 +337,10 @@ MODULE RPara
        RTMat
 
   REAL(RKIND) :: &
-       RDeltaK, RMinimumGMag,RGVectorMagnitude
+       RDeltaK, RMinimumGMag,RGVectorMagnitude,RSVectorMagnitude
   
   REAL(RKIND),DIMENSION(THREEDIM) :: &
-       RGVector
+       RGVector,RSVector
 
   REAL(RKIND),DIMENSION(:),ALLOCATABLE :: &
        RGn
@@ -393,6 +395,9 @@ MODULE RPara
   !Ug' Unique Values
   REAL(RKIND),DIMENSION(:),ALLOCATABLE :: &
        RUniqueUgPrimeValues
+
+  REAL(RKIND) :: &
+       RThetaIntegralParameter
 
 END MODULE RPara
 

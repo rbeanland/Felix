@@ -378,6 +378,7 @@ PROGRAM felixsim
           " in ALLOCATE() of DYNAMIC variables CZeroMat"
      GOTO 9999
   ENDIF
+  PRINT*,RDWF
 
   CALL UgCalculation (IErr)
   IF( IErr.NE.0 ) THEN
@@ -385,7 +386,12 @@ PROGRAM felixsim
           " in UgCalculation"
      GOTO 9999
   ENDIF
+
+  PRINT*,RDWF
   
+  PRINT*,RgMatMag(1,2)
+  
+
   !--------------------------------------------------------------------
   ! high-energy approximation (not HOLZ compatible)
   !--------------------------------------------------------------------
@@ -446,6 +452,8 @@ PROGRAM felixsim
              " in UgAddAbsorption"
         GOTO 9999
      ENDIF
+
+
      IF(IAbsorbFLAG.GE.2) THEN
         DO ind = 2,(SIZE(ISymmetryStrengthKey,DIM=1))
            WHERE (ISymmetryRelations.EQ.ind)
@@ -458,26 +466,18 @@ PROGRAM felixsim
      END IF
      CUgMat =  CUgMat+CUgMatPrime
   END IF
-
-!!$  DO ind = 1,(SIZE(ISymmetryStrengthKey,DIM=1))
-!!$     PRINT*,ISymmetryStrengthKey(ind,:),RUniqueUgPrimeValues(ind)
-!!$  END DO
-
   
+!!$  PRINT*,CUgMat(1,1),&
+!!$       CUgMatPrime(1,1),&
+!!$       RUniqueUgPrimeValues(1)
+  DO ind = 1,IReflectOut
+     PRINT*,CUgMat(1,IOutputReflections(ind)),&
+          CUgMatPrime(1,IOutputReflections(ind)),&
+          RUniqueUgPrimeValues(ind),&
+          RgMatMat(IOutputReflections(ind),1,:) 
+  END DO
 
-!!$  DO ind = 1,MAXVAL(ISymmetryRelations)
-!!$     PRINT*,ISymmetryStrengthKey(ind,:),&
-!!$          ISymmetryRelations(ISymmetryStrengthKey(ind,1),&
-!!$          ISymmetryStrengthKey(ind,2))
-!!$  END DO
-
-  !PRINT*,"No. of Unique Ugs = ",MAXVAL(ISymmetryRelations)
-     
-!!$  DO ind = 1,50
-!!$     PRINT*,CUgMatPrime(ind,1),CUgMat(1,ind)
-!!$  END DO
-
-  !GOTO 9999
+  GOTO 9999
 
   !!$ ! UgMatEffective
   IF(IOutputFLAG.GE.2) THEN
