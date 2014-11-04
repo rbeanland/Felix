@@ -337,15 +337,16 @@ MODULE RPara
        RTMat
 
   REAL(RKIND) :: &
-       RDeltaK, RMinimumGMag,RGVectorMagnitude,RSVectorMagnitude
+       RDeltaK, RMinimumGMag,RGVectorMagnitude,RSVectorMagnitude,&
+       RHVectorMagnitude
   
   REAL(RKIND),DIMENSION(THREEDIM) :: &
-       RGVector,RSVector
+       RGVector,RSVector,RHVector
 
   REAL(RKIND),DIMENSION(:),ALLOCATABLE :: &
        RGn
 
-  !Image Initialisation
+  !Image Initialisationx
   
   REAL(RKIND),DIMENSION(:,:),ALLOCATABLE :: & 
        Rhklpositions
@@ -397,7 +398,7 @@ MODULE RPara
        RUniqueUgPrimeValues
 
   REAL(RKIND) :: &
-       RThetaIntegralParameter
+       RPhiIntegralParameter
 
 END MODULE RPara
 
