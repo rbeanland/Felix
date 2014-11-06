@@ -324,6 +324,8 @@ SUBROUTINE UgAddAbsorption(IErr)
         RGVector = RgVecMatT(ind,:)/TWOPI
         RHVector = RgVecMatT(jnd,:)/TWOPI
 
+!!$        PRINT*,knd,ind,jnd,RHVector
+
         DO IAtom=1, INAtomsUnitCell
            ICurrentAtom = IAtoms(IAtom)
 
@@ -337,12 +339,18 @@ SUBROUTINE UgAddAbsorption(IErr)
            RAbsorpativeAtomicFormFactor= RAbsorpativeAtomicFormFactor*ROcc(IAtom)
 
            RVgij = RVgij + RAbsorpativeAtomicFormFactor*&
-                EXP(CIMAGONE* &
+                EXP(-CIMAGONE* &
                 DOT_PRODUCT(RgMatMat(ind,jnd,:), RrVecMat(IAtom,:)))
+!!$           PRINT*,"+ve, -ve, G, R = ",EXP(CIMAGONE*DOT_PRODUCT(RgMatMat(ind,jnd,:), RrVecMat(IAtom,:))),&
+!!$                EXP(CIMAGONE*DOT_PRODUCT(RgMatMat(ind,jnd,:), RrVecMat(IAtom,:))),&
+!!$                RgMatMat(ind,jnd,:),&
+!!$                RrVecMat(IAtom,:)
                 
         ENDDO
         
 !!$           Calculate Vg'
+!!$
+!!$        PRINT*,"RVGij = ",RVgij
 
         RUniqueUgPrimeValues(knd) = RVgij/(&
              RVolume*PI)
@@ -385,7 +393,7 @@ REAL(RKIND) FUNCTION RSPrimeIntegration(RPhiIntegralParameterIn)
   REAL(RKIND) :: &
        RAbsoluteError
   
-  REAL,INTENT(IN) :: &
+  REAL(RKIND),INTENT(IN) :: &
        RPhiIntegralParameterIn
   INTEGER(IKIND) :: &
        IErr,IIntegrationSteps
@@ -398,6 +406,7 @@ REAL(RKIND) FUNCTION RSPrimeIntegration(RPhiIntegralParameterIn)
    
   EXTERNAL RAnomolousAbsorpativeIntegrand
 
+  RSPrimeIntegration = ZERO
   RPhiIntegralParameter = RPhiIntegralParameterIn
 
 !!$  CALL DQAGS(RAnomolousAbsorpativeIntegrand,0.0D0,PI,&
@@ -444,6 +453,8 @@ SUBROUTINE RIntegrateForAnomolousAbsorption(RAbsorpativeAtomicFormFactor,IErr)
   CALL DQNG(RSPrimeIntegration,0.0D0,TWOPI,&
        0.0D0,1.0D-4,RAbsorpativeAtomicFormFactor,RAbsoluteError,IIntegrationSteps,IErr)
 
+!!$  PRINT*,RAbsoluteError,IIntegrationSteps
+  
 END SUBROUTINE RIntegrateForAnomolousAbsorption
 
 SUBROUTINE IntegrateForMeanAbsorptionValue(RAbsorpativeAtomicFormFactor,IErr)
@@ -624,6 +635,8 @@ REAL(RKIND) FUNCTION  RAnomolousAbsorpativeIntegrand(RThetaIntegralParameter)
   REAL(RKIND),INTENT(IN) :: &
        RThetaIntegralParameter
 
+!!$  PRINT*,"Theta, Phi= ",RThetaIntegralParameter,RPhiIntegralParameter
+
   RBigKVector(1) = (RElectronWaveVectorMagnitude/TWOPI)*DSIN(RThetaIntegralParameter)*DCOS(RPhiIntegralParameter)
   RBigKVector(2) = (RElectronWaveVectorMagnitude/TWOPI)*DSIN(RThetaIntegralParameter)*DSIN(RPhiIntegralParameter)
   RBigKVector(3) = (RElectronWaveVectorMagnitude/TWOPI)*DCOS(RThetaIntegralParameter)
@@ -636,6 +649,14 @@ REAL(RKIND) FUNCTION  RAnomolousAbsorpativeIntegrand(RThetaIntegralParameter)
   RQVectorMagnitude = SQRT(DOT_PRODUCT(RQVector,RQVector))
 
   RAbsorpativeIntegrand = ZERO
+
+!!$  PRINT*,SQRT(DOT_PRODUCT(RBigKVector,RBigKVector)),&
+!!$       SQRT(DOT_PRODUCT(RQVector,RQVector)),&
+!!$       SQRT(DOT_PRODUCT(RGVector,RGVector)),&
+!!$       SQRT(DOT_PRODUCT(RHVector,RHVector)),&
+!!$       SQRT(DOT_PRODUCT(RQVector+RGVector,RQVector+RGVector)),&
+!!$       SQRT(DOT_PRODUCT(RQVector+RHVector,RQVector+RHVector))
+       
   
   SELECT CASE (IScatterFactorMethodFLAG)
      
@@ -725,9 +746,9 @@ REAL(RKIND) FUNCTION  RAnomolousAbsorpativeIntegrand(RThetaIntegralParameter)
 
      RAbsorpativeIntegrand = RAbsorpativeIntegrand * &
           (&
-          EXP(-RDWF(IAtom)*SQRT(DOT_PRODUCT(RGVector-RHVector,RGVector-RHVector)))-&
-          EXP(-RDWF(IAtom)*SQRT(DOT_PRODUCT(RQVector+RGVector,RQVector+RGVector))-&
-          RDWF(IAtom)*SQRT(DOT_PRODUCT(RQVector+RHVector,RQVector+RHVector))))
+          EXP(-RDWF(IAtom)*(DOT_PRODUCT(RGVector-RHVector,RGVector-RHVector)/2))-&
+          EXP(-RDWF(IAtom)*(DOT_PRODUCT(RQVector+RGVector,RQVector+RGVector)/2)-&
+          RDWF(IAtom)*(DOT_PRODUCT(RQVector+RHVector,RQVector+RHVector)/2)))
 
   ELSE
      
