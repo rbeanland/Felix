@@ -909,7 +909,7 @@ PROGRAM felixrefine
            ENDIF
         END DO
         
-        PRINT*,"Exiting Bloch Loop"
+!!$        PRINT*,"Exiting Bloch Loop"
         
         IF((IWriteFLAG.GE.6.AND.my_rank.EQ.0).OR.IWriteFLAG.GE.10) THEN
            PRINT*,"REFINEMAIN : ",my_rank," is exiting calculation loop"
@@ -967,11 +967,7 @@ PROGRAM felixrefine
            PRINT*,"REDUCING Reflections",my_rank
            
         END IF
-        
-        IF(IWriteFLAG.GE.10) THEN
-           PRINT*,"REDUCED Reflections",my_rank
-        END IF
-        
+
         ALLOCATE(&
              IDisplacements(ISubgroupSize),ICount(ISubgroupSize),&
              STAT=IErr)
@@ -1047,8 +1043,15 @@ PROGRAM felixrefine
                  END DO
               END DO
            END DO
+
            
            DO ind = 1,IThicknessCount
+              WHERE(RImageExpi(:,:,1).LE.TINY)
+                 RReflectionImagesForPhaseCorrelation(:,:,IOutputReflections(1),ind) = ZERO
+              END WHERE
+              WHERE(RReflectionImagesForPhaseCorrelation(:,:,IOutputReflections(1),ind).LE.TINY)
+                 RImageExpi(:,:,1) = ZERO
+              END WHERE
               CALL PhaseCorrelate(RReflectionImagesForPhaseCorrelation(:,:,IOutputReflections(1),ind),&
                    RImageExpi(:,:,1),IErr,2*IPixelCount,2*IPixelCount)
               
@@ -1125,7 +1128,7 @@ PROGRAM felixrefine
            GOTO 9999
         END IF
 
-        PRINT*,"Exiting 1"
+!!$        PRINT*,"Exiting 1"
         
      END DO
      
@@ -1223,7 +1226,7 @@ PROGRAM felixrefine
      CASE DEFAULT 
      END SELECT
 
-     PRINT*,"Exiting 2"
+!!$     PRINT*,"Exiting 2"
      
   END DO
 
@@ -1231,7 +1234,7 @@ PROGRAM felixrefine
        FLOOR(REAL(ICorrelationMaximum,RKIND)/REAL(IFluxStepsPerSubgroup,RKIND))
   ISubgroupRootProcessContainingAnswer = (ISubgroupContainingAnswer-1_IKIND)*ISubgroupSize
 
-  PRINT*,ISubgroupRootProcessContainingAnswer,ISubgroupContainingAnswer
+!!$  PRINT*,ISubgroupRootProcessContainingAnswer,ISubgroupContainingAnswer
   
   IF(my_rank.EQ.ISubgroupRootProcessContainingAnswer) THEN
     PRINT*,"Hi, Im rank",my_rank,"im about to write out the result"
@@ -1245,7 +1248,7 @@ PROGRAM felixrefine
         GOTO 9999
      ENDIF
 
-     PRINT*,"Memory Allocated"
+!!$     PRINT*,"Memory Allocated"
      RFinalMontageImage = ZERO
      DO ind = 1,2*IPixelCount
         DO jnd = 1,2*IPixelCount
@@ -1260,7 +1263,7 @@ PROGRAM felixrefine
         END DO
         !PRINT*,RFinalMontageImage(ind,:,1)
      END DO
-     PRINT*,"Have Created Montage IMage"
+!!$     PRINT*,"Have Created Montage IMage"
 
      
      DEALLOCATE(&
@@ -1274,7 +1277,7 @@ PROGRAM felixrefine
           "M-","T",NINT(RThickness),"-P",MAXVAL(IImageSizeXY)  
 !!$     PRINT*,surname
      
-     PRINT*,"Openning File"
+!!$     PRINT*,"Openning File"
 
      CALL MPI_FILE_OPEN( MPI_COMM_SELF, TRIM(surname), &
           MPI_MODE_CREATE+MPI_MODE_WRONLY, MPI_INFO_NULL, IChOutWI_MPI, IErr)
@@ -1283,7 +1286,7 @@ PROGRAM felixrefine
              " in MPI_FILE_OPEN"
         GOTO 9999
      ENDIF
-     PRINT*,"File Open"
+!!$     PRINT*,"File Open"
      
      DO ind = 1,MAXVAL(IImageSizeXY)
         CALL MPI_FILE_WRITE(IChOutWI_MPI,RFinalMontageImage(ind,:,1),MAXVAL(IImageSizeXY),&
@@ -1294,14 +1297,14 @@ PROGRAM felixrefine
            GOTO 9999
         ENDIF
      END DO
-     PRINT*,"FILE WRITTEN"
+!!$     PRINT*,"FILE WRITTEN"
      CALL MPI_FILE_CLOSE(IChOutWI_MPI,IErr)
      IF( IErr.NE.0 ) THEN
         PRINT*,"RefineMain(", my_rank, ") error ", IErr, &
              " in MPI_FILE_CLOSE"
         GOTO 9999
      ENDIF
-     PRINT*,"FILE CLOSED"
+!!$     PRINT*,"FILE CLOSED"
   END IF
   
   IF(my_rank.EQ.0) THEN
