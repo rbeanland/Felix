@@ -656,13 +656,13 @@ SUBROUTINE StrongAndWeakBeamsDetermination(IErr)
 
   IMPLICIT NONE
   
-  INTEGER(IKIND) ind,knd,IErr,IMaximum,ICheck,jnd,hnd, &
-       IAdditionalBmaxStrongBeams,IAdditionalPmaxStrongBeams,&
-       IBeamIterationCounter,IFound
-  REAL(RKIND) RDummySg(nReflections)
-  REAL(RKIND) sumC
-  INTEGER(IKIND), DIMENSION(:),ALLOCATABLE  :: &
-       IAdditionalBmaxStrongBeamList,IAdditionalPmaxStrongBeamList
+  INTEGER(IKIND) IErr
+!!$       IAdditionalBmaxStrongBeams,IAdditionalPmaxStrongBeams,&
+!!$       IBeamIterationCounter,IFound
+!!$  REAL(RKIND) RDummySg(nReflections)
+!!$  REAL(RKIND) sumC
+!!$  INTEGER(IKIND), DIMENSION(:),ALLOCATABLE  :: &
+!!$       IAdditionalBmaxStrongBeamList,IAdditionalPmaxStrongBeamList
 
   IF (my_rank.EQ.0) THEN
      DO WHILE (IMessageCounter .LT.4)
@@ -702,7 +702,7 @@ SUBROUTINE StrongAndWeakBeamsDetermination(IErr)
 
 END SUBROUTINE StrongAndWeakBeamsDetermination
   
-
+!!$ Calculate the beams closest to the Ewald Sphere (ie smallest Sg Parameter)
 SUBROUTINE StrongBeamsDetermination(IErr)
 
   USE WriteToScreen
@@ -757,11 +757,13 @@ SUBROUTINE StrongBeamsDetermination(IErr)
 
 END SUBROUTINE StrongBeamsDetermination
 
-
+!!$If user specifies, include weak beams that are far away from the Ewald Sphere (large g)
+!!$but have a moderate/strong Structure factor (Ug)
 SUBROUTINE WeakBeamsDetermination (IErr)
 
   USE WriteToScreen
   
+  USE MyNumbers
   USE CConst; USE IConst
   USE IPara; USE RPara; USE CPara; USE SPara
   USE IChannels
@@ -772,7 +774,7 @@ SUBROUTINE WeakBeamsDetermination (IErr)
 
   IMPLICIT NONE
 
-  INTEGER(IKIND):: ind,jnd,knd,IErr,IMaximum,ICheck,IFound
+  INTEGER(IKIND):: ind,jnd,knd,hnd,IErr,IMaximum,ICheck,IFound
 
   REAL(RKIND) :: RDummySg(nReflections)
 
@@ -784,9 +786,10 @@ SUBROUTINE WeakBeamsDetermination (IErr)
      END DO
   END IF
   
-  
-  RDummySg = ABS(RMeanInnerCrystalPotential/RDevPara)
-  
+  DO hnd=1,nReflections
+  RDummySg(nReflections) = ABS(REAL(CUgMat(nReflections,1))/(RDevPara(nReflections)+TINY))
+  END DO
+
   jnd = 0
 
   !Determine RBSBethePara
@@ -842,7 +845,7 @@ SUBROUTINE WeakBeamsDetermination (IErr)
   DO knd=1,nReflections
      IFound = 0
      IF( (ABS(RDevPara(knd)) .GT. RBSMaxDeviationPara).AND. &
-          (ABS(RMeanInnerCrystalPotential/RDevPara(knd)) .GE. RBSBethePara)) THEN
+          (ABS(REAL(CUgMat(nReflections,1))/(RDevPara(nReflections)+TINY)) .GE. RBSBethePara)) THEN
         DO ind = 1,IStrongBeamIndex
            IF(IStrongBeamList(ind).EQ.knd) THEN
               IFound = IFound + 1
@@ -860,7 +863,8 @@ SUBROUTINE WeakBeamsDetermination (IErr)
 END SUBROUTINE WeakBeamsDetermination
 
 
-
+!!$Sort out from both weak (Ug/Sg) and strong beams (Sg from Ewald Sphere) 
+!!$which beams are the strongest
 SUBROUTINE BmaxAndPmaxFitting (IErr)
 
   USE WriteToScreen
