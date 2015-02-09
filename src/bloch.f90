@@ -480,8 +480,13 @@ SUBROUTINE CreateWaveFunctions(rthickness,IErr)
   COMPLEX(CKIND),DIMENSION(:,:),ALLOCATABLE :: &
        CDummyEigenVectors
 
-  IF (my_rank.EQ.0) THEN
-     DO WHILE (IMessageCounter .LT.6)
+  IF (my_rank.EQ.0.AND.IMinWeakBeams.NE.0) THEN
+     DO WHILE (IMessageCounter .LT.9)
+        CALL Message("CreateWaveFunctions",IMust,IErr)
+        IMessageCounter = IMessageCounter +1
+     END DO
+  ELSE IF (my_rank.EQ.0) THEN
+     DO WHILE (IMessageCounter .LT.7)
         CALL Message("CreateWaveFunctions",IMust,IErr)
         IMessageCounter = IMessageCounter +1
      END DO
@@ -612,6 +617,8 @@ SUBROUTINE DeviationParameterCalculation(IErr)
   USE MPI
   USE MyMPI
 
+  IMPLICIT NONE
+
   INTEGER(IKIND) knd,IErr
   
   IF (my_rank.EQ.0) THEN
@@ -646,8 +653,10 @@ SUBROUTINE StrongAndWeakBeamsDetermination(IErr)
   
   USE MPI
   USE MyMPI
+
+  IMPLICIT NONE
   
-  INTEGER(IKIND) ind,knd,IErr,IMinimum,IMaximum,ICheck,jnd,hnd, &
+  INTEGER(IKIND) ind,knd,IErr,IMaximum,ICheck,jnd,hnd, &
        IAdditionalBmaxStrongBeams,IAdditionalPmaxStrongBeams,&
        IBeamIterationCounter,IFound
   REAL(RKIND) RDummySg(nReflections)
@@ -655,9 +664,67 @@ SUBROUTINE StrongAndWeakBeamsDetermination(IErr)
   INTEGER(IKIND), DIMENSION(:),ALLOCATABLE  :: &
        IAdditionalBmaxStrongBeamList,IAdditionalPmaxStrongBeamList
 
-    IF (my_rank.EQ.0) THEN
+  IF (my_rank.EQ.0) THEN
      DO WHILE (IMessageCounter .LT.4)
         CALL Message("StrongAndWeakBeamsDetermination",IMust,IErr)
+        IMessageCounter = IMessageCounter +1
+     END DO
+  END IF
+
+  CALL StrongBeamsDetermination(IErr)
+  IF( IErr.NE.0 ) THEN
+     PRINT*,"StrongandWeakBeamsDetermination(", my_rank, ") error ", IErr, &
+          " in StrongBeamsDetermination"
+     RETURN
+  ENDIF
+
+  IF (IMinWeakBeams.NE.0) THEN
+     
+     CALL WeakBeamsDetermination(IErr)
+     IF( IErr.NE.0 ) THEN
+        PRINT*,"StrongandWeakBeamsDetermination(", my_rank, ") error ", IErr, &
+             " in WeakBeamsDetermination"
+        RETURN
+     ENDIF
+     
+     
+     CALL BmaxAndPmaxFitting(IErr)
+     IF( IErr.NE.0 ) THEN
+        PRINT*,"StrongandWeakBeamsDetermination(", my_rank, ") error ", IErr, &
+             " in WeakBeamsDetermination"
+        RETURN
+     ENDIF
+  
+  ELSE 
+     
+     RETURN
+  END IF
+
+END SUBROUTINE StrongAndWeakBeamsDetermination
+  
+
+SUBROUTINE StrongBeamsDetermination(IErr)
+
+  USE WriteToScreen
+  
+  USE CConst; USE IConst
+  USE IPara; USE RPara; USE CPara; USE SPara
+  USE IChannels
+  USE BlochPara
+  
+  USE MPI
+  USE MyMPI
+
+  IMPLICIT NONE
+
+
+  INTEGER(IKIND) :: IMinimum,ind,knd,IErr
+  
+  REAL(RKIND) :: RDummySg(nReflections)
+
+  IF (my_rank.EQ.0) THEN
+     DO WHILE (IMessageCounter .LT.5)
+        CALL Message("StrongBeamsDetermination",IMust,IErr)
         IMessageCounter = IMessageCounter +1
      END DO
   END IF
@@ -687,6 +754,36 @@ SUBROUTINE StrongAndWeakBeamsDetermination(IErr)
         IStrongBeamList(IStrongBeamIndex)= knd
      ENDIF
   ENDDO
+
+END SUBROUTINE StrongBeamsDetermination
+
+
+SUBROUTINE WeakBeamsDetermination (IErr)
+
+  USE WriteToScreen
+  
+  USE CConst; USE IConst
+  USE IPara; USE RPara; USE CPara; USE SPara
+  USE IChannels
+  USE BlochPara
+  
+  USE MPI
+  USE MyMPI
+
+  IMPLICIT NONE
+
+  INTEGER(IKIND):: ind,jnd,knd,IErr,IMaximum,ICheck,IFound
+
+  REAL(RKIND) :: RDummySg(nReflections)
+
+
+  IF (my_rank.EQ.0) THEN
+     DO WHILE (IMessageCounter .LT.6)
+        CALL Message("WeakBeamsDetermination",IMust,IErr)
+        IMessageCounter = IMessageCounter +1
+     END DO
+  END IF
+  
   
   RDummySg = ABS(RMeanInnerCrystalPotential/RDevPara)
   
@@ -705,8 +802,8 @@ SUBROUTINE StrongAndWeakBeamsDetermination(IErr)
   ! Apply Bmax Criteria 
   !----------------------------------------------------------------------------
 
-  IAdditionalBmaxStrongBeams = 0
-  IAdditionalPmaxStrongBeams = 0
+ ! IAdditionalBmaxStrongBeams = 0
+ ! IAdditionalPmaxStrongBeams = 0
   
   IF(IStrongBeamIndex+IMinWeakBeams.GT.nReflections) THEN
      IErr = 1
@@ -760,7 +857,44 @@ SUBROUTINE StrongAndWeakBeamsDetermination(IErr)
      ENDIF
   ENDDO
   
-  ALLOCATE(&
+END SUBROUTINE WeakBeamsDetermination
+
+
+
+SUBROUTINE BmaxAndPmaxFitting (IErr)
+
+  USE WriteToScreen
+  
+  USE CConst; USE IConst
+  USE IPara; USE RPara; USE CPara; USE SPara
+  USE IChannels
+  USE BlochPara
+  
+  USE MPI
+  USE MyMPI
+
+
+  IMPLICIT NONE
+
+  INTEGER(IKIND) :: ind, knd, hnd, IFound, IErr, &
+       IAdditionalBmaxStrongBeams,IAdditionalPmaxStrongBeams
+  REAL(RKIND) :: sumC
+  INTEGER(IKIND), DIMENSION(:),ALLOCATABLE  :: &
+       IAdditionalBmaxStrongBeamList,IAdditionalPmaxStrongBeamList
+
+
+  IAdditionalBmaxStrongBeams = 0
+  IAdditionalPmaxStrongBeams = 0
+  IFound=0
+
+  IF (my_rank.EQ.0) THEN
+     DO WHILE (IMessageCounter .LT.7)
+        CALL Message("BmaxAndPmaxFitting",IMust,IErr)
+        IMessageCounter = IMessageCounter +1
+     END DO
+  END IF
+
+ ALLOCATE(&
        IAdditionalBmaxStrongBeamList(IWeakBeamIndex),&
        STAT=IErr)
   IF( IErr.NE.0 ) THEN
@@ -906,4 +1040,4 @@ SUBROUTINE StrongAndWeakBeamsDetermination(IErr)
      ENDIF
   ENDDO
 
-END SUBROUTINE StrongAndWeakBeamsDetermination
+END SUBROUTINE BmaxAndPmaxFitting

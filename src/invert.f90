@@ -66,13 +66,20 @@ SUBROUTINE INVERT(MatrixSize,Matrix,InvertedMatrix,IErr)
 !!$  END DO
   !INFO=0
 
-  IF (my_rank.EQ.0) THEN
-     DO WHILE (IMessageCounter .LT.7)
+  IF (my_rank.EQ.0.AND.IMinWeakBeams.NE.0) THEN
+     DO WHILE (IMessageCounter .LT.10)
         CALL Message("Invert",IMust,IErr)
         CALL Message("Invert",IMust+IDebug,IErr, & 
              MessageString = "is the last subroutine to be called within BlochLoop")
         IMessageCounter = IMessageCounter +1
      END DO
+     ELSE IF (my_rank.EQ.0) THEN
+        DO WHILE (IMessageCounter .LT.8)
+           CALL Message("Invert",IMust,IErr)
+           CALL Message("Invert",IMust+IDebug,IErr, & 
+                MessageString = "is the last subroutine to be called within BlochLoop")
+           IMessageCounter = IMessageCounter +1
+        END DO
   END IF
   
   ALLOCATE(IPIV(MatrixSize),STAT=IErr)

@@ -1,6 +1,6 @@
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 !
-! BlochSim
+! FelixSim
 !
 ! Richard Beanland, Keith Evans, Rudolf A Roemer and Alexander Hubert
 !
@@ -15,20 +15,20 @@
 ! 
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 !
-!  This file is part of BlochSim.
+!  This file is part of FelixSim.
 !
-!  BlochSim is free software: you can redistribute it and/or modify
+!  FelixSim is free software: you can redistribute it and/or modify
 !  it under the terms of the GNU General Public License as published by
 !  the Free Software Foundation, either version 3 of the License, or
 !  (at your option) any later version.
 !  
-!  BlochSim is distributed in the hope that it will be useful,
+!  FelixSim is distributed in the hope that it will be useful,
 !  but WITHOUT ANY WARRANTY; without even the implied warranty of
 !  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 !  GNU General Public License for more details.
 !  
 !  You should have received a copy of the GNU General Public License
-!  along with BlochSim.  If not, see <http://www.gnu.org/licenses/>.
+!  along with FelixSim.  If not, see <http://www.gnu.org/licenses/>.
 !
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -63,8 +63,13 @@ SUBROUTINE EigenSpectrum(isize, matU, evals, evecs, IErr)
 
   !PRINT*,"DBG: EigenSpectrum()"
 
-  IF (my_rank.EQ.0) THEN
-     DO WHILE (IMessageCounter .LT.5)
+  IF (my_rank.EQ.0.AND.IMinWeakBeams.NE.0) THEN
+     DO WHILE (IMessageCounter .LT.8)
+        CALL Message("EigenSpectrum",IMust,IErr)
+        IMessageCounter = IMessageCounter +1
+     END DO
+  ELSE IF (my_rank.EQ.0) THEN
+     DO WHILE (IMessageCounter .LT.6)
         CALL Message("EigenSpectrum",IMust,IErr)
         IMessageCounter = IMessageCounter +1
      END DO
