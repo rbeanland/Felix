@@ -47,7 +47,7 @@ SUBROUTINE BlochCoefficientCalculation(ind,jnd,gnd,ILocalPixelCountMin,IErr)
   
   IMPLICIT NONE
   
-  INTEGER(IKIND) ind,jnd,hnd,knd,gnd,pnd,&
+  INTEGER(IKIND) ind,jnd,hnd,knd,gnd,pnd,fnd, &
        ierr,IThickness, &
        IThicknessIndex, ILowerLimit, &
        IUpperLimit,ILocalPixelCountMin
@@ -299,27 +299,35 @@ SUBROUTINE BlochCoefficientCalculation(ind,jnd,gnd,ILocalPixelCountMin,IErr)
      
      
      ! add the weak beams perturbatively for the 1st column (sumC) and
-     ! the diagonal elements (sumD)
-     
-     DO knd=2,nBeams
-        sumC= CZERO
-        sumD= CZERO
-        DO hnd=1,IWeakBeamIndex
-           
-           sumC = sumC + &
-                REAL(CUgMat(IStrongBeamList(knd),IWeakBeamList(hnd))) * &
-                REAL(CUgMat(IWeakBeamList(hnd),1)) / &
-                (4*RBigK*RBigK*RDevPara(IWeakBeamList(hnd)))
-           
-           sumD = sumD + &
+     ! the diagonal elements (sumD),only if weak beams are present
+     IF (IMinWeakBeams.NE.0) THEN 
+        DO knd=2,nBeams
+           sumC= CZERO
+           sumD= CZERO
+           DO hnd=1,IWeakBeamIndex
+              
+              sumC = sumC + &
+                   REAL(CUgMat(IStrongBeamList(knd),IWeakBeamList(hnd))) * &
+                   REAL(CUgMat(IWeakBeamList(hnd),1)) / &
+                   (4*RBigK*RBigK*RDevPara(IWeakBeamList(hnd)))
+              
+              sumD = sumD + &
                 REAL(CUgMat(IStrongBeamList(knd),IWeakBeamList(hnd))) * &
                 REAL(CUgMat(IWeakBeamList(hnd),IStrongBeamList(knd))) / &
                 (4*RBigK*RBigK*RDevPara(IWeakBeamList(hnd)))
+              
+           ENDDO
+
+!!$        apply perturbation to all off diagonal elements
+           DO fnd = 2,nBeams
+              IF (knd.NE.fnd) THEN
+                 CUgMatEffective(knd,fnd)= CUgMatEffective(knd,fnd) - sumC
+              END IF
+           END DO
            
+           CUgMatEffective(knd,knd)= CUgMatEffective(knd,knd) - sumD
         ENDDO
-        CUgMatEffective(knd,1)= CUgMatEffective(knd,1) - sumC
-        CUgMatEffective(knd,knd)= CUgMatEffective(knd,knd) - sumD
-     ENDDO
+     END IF
      
   END IF
    
@@ -718,9 +726,11 @@ SUBROUTINE StrongBeamsDetermination(IErr)
   IMPLICIT NONE
 
 
-  INTEGER(IKIND) :: IMinimum,ind,knd,IErr
+  INTEGER(IKIND) :: IMinimum,ind,knd,IErr,hnd
   
-  REAL(RKIND) :: RDummySg(nReflections)
+  REAL(RKIND) :: &
+       RDummySg(nReflections),&
+       RDummyBethe
 
   IF (my_rank.EQ.0) THEN
      DO WHILE (IMessageCounter .LT.5)
@@ -735,26 +745,43 @@ SUBROUTINE StrongBeamsDetermination(IErr)
 
   IStrongBeamList = 0
 
-  RDummySg = ABS(RDevPara)
+  DO hnd=1,nReflections
+     RDummySg(hnd) = ABS(REAL(CUgMat(hnd,1))/(RDevPara(hnd)+TINY))
+!!$     IF (my_rank.EQ.0) THEN
+!!$        PRINT*,"RDummySg",RDummySg
+!!$     END IF
+  END DO
+  
+  
+!  RDummySg = ABS(RDevPara)
 
   DO ind=1,IMinStrongBeams
-     IMinimum = MINLOC(RDummySg,1)
+    ! IMinimum = MINLOC(RDummySg,1)
+     IMinimum = MAXLOC(RDummySg,1)
      IF(ind.EQ.IMinStrongBeams) THEN
         RBSMaxDeviationPara = ABS(RDummySg(IMinimum))
      ELSE
-        RDummySg(IMinimum) = 1000000 !Large number
+        RDummySg(IMinimum) = 0.D0 !Large number !for only distance Sg (no bethe) change to 100000
      END IF
   END DO
+  
+  
   
   IStrongBeamIndex=0
   IWeakBeamIndex=0
   DO knd=1,nReflections
-     IF( ABS(RDevPara(knd)) .LE. RBSMaxDeviationPara ) THEN
+     RDummyBethe= ABS(REAL(CUgMat(knd,1))/(RDevPara(knd)+TINY))
+     IF (RDummyBethe.GE.RBSMaxDeviationPara.OR.ABS(RDevPara(knd)).LT.TINY)  THEN
         IStrongBeamIndex= IStrongBeamIndex +1
         IStrongBeamList(IStrongBeamIndex)= knd
      ENDIF
   ENDDO
 
+!!$IF (my_rank.EQ.0) THEN
+!!$        PRINT*,"stuuff",RBSMaxDeviationPara, IStrongBeamIndex, nReflections 
+!!$END IF
+!!$ 
+  
 END SUBROUTINE StrongBeamsDetermination
 
 !!$If user specifies, include weak beams that are far away from the Ewald Sphere (large g)
@@ -787,7 +814,7 @@ SUBROUTINE WeakBeamsDetermination (IErr)
   END IF
   
   DO hnd=1,nReflections
-  RDummySg(nReflections) = ABS(REAL(CUgMat(nReflections,1))/(RDevPara(nReflections)+TINY))
+  RDummySg(hnd) = ABS(REAL(CUgMat(hnd,1))/(RDevPara(hnd)+TINY))
   END DO
 
   jnd = 0
@@ -845,7 +872,7 @@ SUBROUTINE WeakBeamsDetermination (IErr)
   DO knd=1,nReflections
      IFound = 0
      IF( (ABS(RDevPara(knd)) .GT. RBSMaxDeviationPara).AND. &
-          (ABS(REAL(CUgMat(nReflections,1))/(RDevPara(nReflections)+TINY)) .GE. RBSBethePara)) THEN
+          (ABS(REAL(CUgMat(knd,1))/(RDevPara(knd)+TINY)) .GE. RBSBethePara)) THEN
         DO ind = 1,IStrongBeamIndex
            IF(IStrongBeamList(ind).EQ.knd) THEN
               IFound = IFound + 1
