@@ -743,45 +743,72 @@ SUBROUTINE StrongBeamsDetermination(IErr)
   ! Determine RBSMaxDeviationPara
   !----------------------------------------------------------------------------
 
-  IStrongBeamList = 0
+  IF (IMinWeakBeams.GT.0) THEN
 
-  DO hnd=1,nReflections
-     RDummySg(hnd) = ABS(REAL(CUgMat(hnd,1))/(RDevPara(hnd)+TINY))
+     IStrongBeamList = 0
+
+     RDummySg = ABS(RDevPara)
+
+     DO ind=1,IMinStrongBeams
+        IMinimum = MINLOC(RDummySg,1)
+        IF(ind.EQ.IMinStrongBeams) THEN
+           RBSMaxDeviationPara = ABS(RDummySg(IMinimum))
+        ELSE
+           RDummySg(IMinimum) = 1000000 !Large number
+        END IF
+     END DO
+     IStrongBeamIndex=0
+     IWeakBeamIndex=0
+     DO knd=1,nReflections
+        IF( ABS(RDevPara(knd)) .LE. RBSMaxDeviationPara ) THEN
+           IStrongBeamIndex= IStrongBeamIndex +1
+           IStrongBeamList(IStrongBeamIndex)= knd
+        ENDIF
+     ENDDO
+
+
+  ELSE IF (IMinWeakBeams.EQ.0) THEN
+
+     IStrongBeamList = 0
+     
+     DO hnd=1,nReflections
+        RDummySg(hnd) = ABS(REAL(CUgMat(hnd,1))/(RDevPara(hnd)+TINY))
 !!$     IF (my_rank.EQ.0) THEN
 !!$        PRINT*,"RDummySg",RDummySg
 !!$     END IF
-  END DO
+     END DO
+     
+     
+     !  RDummySg = ABS(RDevPara)
+     
+     DO ind=1,IMinStrongBeams
+        ! IMinimum = MINLOC(RDummySg,1)
+        IMinimum = MAXLOC(RDummySg,1)
+        IF(ind.EQ.IMinStrongBeams) THEN
+           RBSMaxDeviationPara = ABS(RDummySg(IMinimum))
+        ELSE
+           RDummySg(IMinimum) = 0.D0 !Large number !for only distance Sg (no bethe) change to 100000
+        END IF
+     END DO
   
-  
-!  RDummySg = ABS(RDevPara)
+     
+     
+     IStrongBeamIndex=0
+     IWeakBeamIndex=0
+     DO knd=1,nReflections
+        RDummyBethe= ABS(REAL(CUgMat(knd,1))/(RDevPara(knd)+TINY))
+        IF (RDummyBethe.GE.RBSMaxDeviationPara.OR.ABS(RDevPara(knd)).LT.TINY)  THEN
+           IStrongBeamIndex= IStrongBeamIndex +1
+           IStrongBeamList(IStrongBeamIndex)= knd
+        ENDIF
+     ENDDO
 
-  DO ind=1,IMinStrongBeams
-    ! IMinimum = MINLOC(RDummySg,1)
-     IMinimum = MAXLOC(RDummySg,1)
-     IF(ind.EQ.IMinStrongBeams) THEN
-        RBSMaxDeviationPara = ABS(RDummySg(IMinimum))
-     ELSE
-        RDummySg(IMinimum) = 0.D0 !Large number !for only distance Sg (no bethe) change to 100000
-     END IF
-  END DO
-  
-  
-  
-  IStrongBeamIndex=0
-  IWeakBeamIndex=0
-  DO knd=1,nReflections
-     RDummyBethe= ABS(REAL(CUgMat(knd,1))/(RDevPara(knd)+TINY))
-     IF (RDummyBethe.GE.RBSMaxDeviationPara.OR.ABS(RDevPara(knd)).LT.TINY)  THEN
-        IStrongBeamIndex= IStrongBeamIndex +1
-        IStrongBeamList(IStrongBeamIndex)= knd
-     ENDIF
-  ENDDO
-
+  END IF
 !!$IF (my_rank.EQ.0) THEN
 !!$        PRINT*,"stuuff",RBSMaxDeviationPara, IStrongBeamIndex, nReflections 
 !!$END IF
 !!$ 
-  
+     
 END SUBROUTINE StrongBeamsDetermination
 
 !!$If user specifies, include weak beams that are far away from the Ewald Sphere (large g)
