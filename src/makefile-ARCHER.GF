@@ -36,23 +36,27 @@
 # $Id: makefile-CSC.GF,v 1.2 2014/03/27 18:13:30 phsht Exp $
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-F90 = mpif90
-FC = gfortran -ffixed-form -std=legacy
-F90FLAGS = -fbounds-check -fno-range-check -fimplicit-none -fcray-pointer # debug
-#F90FLAGS = -pg -fbounds-check -fno-range-check -fimplicit-none # profiling
-F77FLAGS = -fbounds-check -fno-range-check # debug
+F90 = ftn
+FC = ftn
+F90FLAGS = # release
+#F90FLAGS = -fbounds-check -fno-range-check -fimplicit-none -fcray-pointer # debug
+#F90FLAGS = pg -fbounds-check -fno-range-check -fimplicit-none # profiling
+F77FLAGS = # debug
+#F77FLAGS = -fbounds-check -fno-range-check # debug
 
-INCLUDEDIR = /warwick/mathlib/gnu/x86_64/ # CSC machines
+#INCLUDEDIR = # ARCHER
+#INCLUDEDIR = /warwick/mathlib/gnu/x86_64/ # CSC machines
 #INCLUDEDIR = /usr/lib/ # RAR Linux
 
-LIBFLAGS= -llapack -lblas -lfftw3
+#LIBFLAGS= -llapack -lblas -lfftw3 # CSC
+#LIBFLAGS= -lcray-libsci
 
 # NOTE if linking against $(NAG_SHARED) you must set the environment variable
 # LD_LIBRARY_PATH=/warwick/mathlib/nag/ifort-x86_64/lib:$LD_LIBRARY_PATH
 # in order to run the code
 
 SIMOBJECTFILES = gmodules.o smodules.o message.o felixsim.o util.o in.o out.o readinput.o \
-readciffile.o experimentalsetup.o imagesetup.o montagesetup.o refineutils.o\
+readciffile.o experimentalsetup.o imagesetup.o montagesetup.o \
 structurefactorsetup.o ciftbx.o hash_funcs.o eigen.o invert.o microscopy.o \
 diffractionpatterndefinitions.o diffractionpatterninitialisation.o crystallographyinitialisation.o \
 crystallography.o bloch.o Ug.o image.o errorchecks.o writeoutput.o dqng.o xerror.o d1mach.o
@@ -70,31 +74,31 @@ hash_funcs.o felixfunction.o refineutils.o writeoutput.o dqng.o xerror.o d1mach.
 symmetry.o
 
 %.o: %.f90
-	$(F90) $(F90FLAGS) -DF90 -c $< -I$(INCLUDEDIR) $(LIBFLAGS)
+	$(F90) $(F90FLAGS) -DF90 -c $<
 #	$(F90) -c $< $(INCLUDEDIR) $(LIBFLAGS)
 
 %.o: %.F90
-	$(F90) $(F90FLAGS) -DF90 -c $< -I$(INCLUDEDIR) $(LIBFLAGS)
+	$(F90) $(F90FLAGS) -DF90 -c $<
 
 %.o: %.f
-	$(FC) $(F77FLAGS) -DF77 -c $< -I$(INCLUDEDIR) $(LIBFLAGS)
+	$(FC) $(F77FLAGS) -DF77 -c $<
 
 %.o: %.F
-	$(FC) $(F77FLAGS) -DF77 -c $< -I$(INCLUDEDIR) $(LIBFLAGS)
+	$(FC) $(F77FLAGS) -DF77 -c $<
 
 all:	felixsim felixdraw felixrefine
 
 felixsim: $(SIMOBJECTFILES)
-	$(F90) $(F90FLAGS) -o $@ $(SIMOBJECTFILES) -I$(INCLUDEDIR) $(LIBFLAGS)
-#	$(F90) -o $@ $(SIMOBJECTFILES) $(LIBFLAGS)
+	$(F90) $(F90FLAGS) -o $@ $(SIMOBJECTFILES)
+#	$(F90) -o $@ $(SIMOBJECTFILES)
 
 felixdraw: $(DRAWOBJECTFILES)
-	$(F90) $(F90FLAGS) -o $@ $(DRAWOBJECTFILES) -I$(INCLUDEDIR) $(LIBFLAGS)
-#	$(F90) -o $@ $(DRAWOBJECTFILES) $(LIBFLAGS)
+	$(F90) $(F90FLAGS) -o $@ $(DRAWOBJECTFILES)
+#	$(F90) -o $@ $(DRAWOBJECTFILES)
 
 felixrefine: $(REFINEOBJECTFILES)
-	$(F90) $(F90FLAGS) -o $@ $(REFINEOBJECTFILES) -I$(INCLUDEDIR) $(LIBFLAGS)
-#	$(F90) -o $@ $(REFINEOBJECTFILES) $(LIBFLAGS)
+	$(F90) $(F90FLAGS) -o $@ $(REFINEOBJECTFILES)
+#	$(F90) -o $@ $(REFINEOBJECTFILES)
 
 
 print:	

@@ -263,7 +263,7 @@ SUBROUTINE OpenDataForAppend(IChOutWrite, prefix, surname, IErr)
   END IF
   
   OPEN(UNIT= IChOutWrite, ERR= 10, STATUS= 'UNKNOWN',&
-       FILE=TRIM(filename),ACCESS='APPEND')
+       FILE=TRIM(filename),POSITION='APPEND')
 
   RETURN
 
@@ -302,6 +302,7 @@ SUBROUTINE OpenReflectionImage(IChOutWrite, surname, IErr,IReflectWriting,IImage
 
   CHARACTER*250 filename
   CHARACTER*40 fileext
+  CHARACTER*60 Simagesize
   INTEGER index,ind
 
   !!$  Only Prints out this message once when iterating (i.e. when in 1st iteration)
@@ -328,13 +329,10 @@ SUBROUTINE OpenReflectionImage(IChOutWrite, surname, IErr,IReflectWriting,IImage
      END IF
   END SELECT
 
- ! CALL Message("OpenReflectionImage",IMoreInfo,IErr, MessageVariable = "filename", &
-  !     MessageString = filename)
+  WRITE(Simagesize,"(A2,I5.5,A2,I5.5)") &
+       "-P",IImageSizeX,&
+       "-P",IImageSizeX
 
-!!$  IF (IWriteFLAG.GE.10) THEN
-!!$     PRINT*,filename
-!!$  END IF
-  
   SELECT CASE (IBinorTextFLAG)
   CASE(0)
      WRITE(fileext,*) TRIM(ADJUSTL(".bin")) 
@@ -344,34 +342,37 @@ SUBROUTINE OpenReflectionImage(IChOutWrite, surname, IErr,IReflectWriting,IImage
   
   SELECT CASE(IChOutWrite)
   CASE(IChOutWFImageReal)        
-     WRITE(filename,*) TRIM(ADJUSTL(surname)),"/F-WF-A_",&
+     WRITE(filename,*) TRIM(ADJUSTL(surname)),"/f-WF-A-hkl-",&
           TRIM(ADJUSTL(h)),&
           TRIM(ADJUSTL(k)),&
           TRIM(ADJUSTL(l)),&
+          TRIM(ADJUSTL(Simagesize)),&
           TRIM(ADJUSTL(fileext))
      IF (IWriteFLAG.GE.10) THEN
         PRINT*, "OpenImage: opening image for WAVE FUNCTION REAL PART (WR*.txt)"
      END IF
   CASE(IChOutWFImagePhase)        
-     WRITE(filename,*) TRIM(ADJUSTL(surname)),"/F-WF-P_",&
+     WRITE(filename,*) TRIM(ADJUSTL(surname)),"/f-WF-P-hkl-",&
           TRIM(ADJUSTL(h)),&
           TRIM(ADJUSTL(k)),&
           TRIM(ADJUSTL(l)),&
+          TRIM(ADJUSTL(Simagesize)),&
           TRIM(ADJUSTL(fileext))
      IF (IWriteFLAG.GE.10) THEN
         PRINT*, "OpenImage: opening image for WAVE FUNCTION PHASE PART (WP*.txt)"
      END IF
   CASE(IChOutWIImage) 
-     WRITE(filename,*) TRIM(ADJUSTL(surname)),"/F-WI_",&
+     WRITE(filename,*) TRIM(ADJUSTL(surname)),"/f-WI-hkl-",&
           TRIM(ADJUSTL(h)),&
           TRIM(ADJUSTL(k)),&
           TRIM(ADJUSTL(l)),&
-          TRIM(ADJUSTL(fileext))
+          TRIM(ADJUSTL(Simagesize)),&
+          TRIM(ADJUSTL(fileext))     
      IF (IWriteFLAG.GE.10) THEN
         PRINT*, "OpenImage: opening image for WAVE INTENSITIES"
      END IF
   CASE(MontageOut)        
-     WRITE(filename,*) "F-WI-",TRIM(ADJUSTL(surname)),&
+     WRITE(filename,*) TRIM(ADJUSTL(surname)),"-WI-M",&
           TRIM(ADJUSTL(fileext))
      IF (IWriteFLAG.GE.10) THEN
         PRINT*, "OpenImage: opening image for WAVE INTENSITIES"
@@ -540,12 +541,12 @@ SUBROUTINE WriteEigenSystem_MPI( IChOutWrite, &
   
   IF ( 2*13*SIZE(CdataEVec)+2*13*SIZE(CdataEVal)+3*SIZE(ISbeamlist)+3*6*ADD_OUT_INFO .GT. IMAXCBuffer ) THEN
      IErr=1
-     PRINT*, "WriteEigenSystem_MPI(", my_rank, ") error ", IErr, &
-          ", output buffer size IMAXCBuffer=", IMAXCBuffer, &
-          " smaller than SIZEOF(EVec+EVal+Sbeam)=", &
-          SIZEOF(CdataEVec)+SIZEOF(CdataEVal)+SIZEOF(ISbeamlist), &
-          SIZE(CdataEVec) + SIZE(CdataEVal) + SIZE(ISbeamlist), &
-          2*13*SIZE(CdataEVec)+2*13*SIZE(CdataEVal)+3*SIZE(ISbeamlist)+3*6*ADD_OUT_INFO
+!!$     PRINT*, "WriteEigenSystem_MPI(", my_rank, ") error ", IErr, &
+!!$          ", output buffer size IMAXCBuffer=", IMAXCBuffer, &
+!!$          " smaller than SIZEOF(EVec+EVal+Sbeam)=", &
+!!$          SIZEOF(CdataEVec)+SIZEOF(CdataEVal)+SIZEOF(ISbeamlist), &
+!!$          SIZE(CdataEVec) + SIZE(CdataEVal) + SIZE(ISbeamlist), &
+!!$          2*13*SIZE(CdataEVec)+2*13*SIZE(CdataEVal)+3*SIZE(ISbeamlist)+3*6*ADD_OUT_INFO
      GOTO 20
   ENDIF
   
@@ -554,7 +555,7 @@ SUBROUTINE WriteEigenSystem_MPI( IChOutWrite, &
      WRITE(FORMATstring,*) nbeamout
      WRITE(DATAstring,&
           "(7(I3.1,1X),"//TRIM(ADJUSTL(TRIM(FORMATstring)))//"(1F13.10,1X), &
-          "//TRIM(ADJUSTL(TRIM(FORMATstring)))//"(1F13.10,1X),(1F13.10,1X),(1F13.10,1X),A1)") &
+          &"//TRIM(ADJUSTL(TRIM(FORMATstring)))//"(1F13.10,1X),(1F13.10,1X),(1F13.10,1X),A1)") &
           my_rank, ipos,jpos,nReflect,nbeamout,ind, ISbeamlist(ind), &
           REAL(CdataEVal(ind)), AIMAG(CdataEVal(ind)),&
           REAL(CdataEVec(ind,:)), AIMAG(CdataEVec(ind,:)), &
@@ -611,12 +612,12 @@ SUBROUTINE WriteEigenSystemBinary_MPI( IChOutWrite, &
   
   IF ( 2*13*SIZE(CdataEVec)+2*13*SIZE(CdataEVal)+3*SIZE(ISbeamlist)+3*6*ADD_OUT_INFO .GT. IMAXCBuffer ) THEN
      IErr=1
-     PRINT*, "WriteEigenSystem_MPI(", my_rank, ") error ", IErr, &
-          ", output buffer size IMAXCBuffer=", IMAXCBuffer, &
-          " smaller than SIZEOF(EVec+EVal+Sbeam)=", &
-          SIZEOF(CdataEVec)+SIZEOF(CdataEVal)+SIZEOF(ISbeamlist), &
-          SIZE(CdataEVec) + SIZE(CdataEVal) + SIZE(ISbeamlist), &
-          2*13*SIZE(CdataEVec)+2*13*SIZE(CdataEVal)+3*SIZE(ISbeamlist)+3*6*ADD_OUT_INFO
+!!$     PRINT*, "WriteEigenSystem_MPI(", my_rank, ") error ", IErr, &
+!!$          ", output buffer size IMAXCBuffer=", IMAXCBuffer, &
+!!$          " smaller than SIZEOF(EVec+EVal+Sbeam)=", &
+!!$          SIZEOF(CdataEVec)+SIZEOF(CdataEVal)+SIZEOF(ISbeamlist), &
+!!$          SIZE(CdataEVec) + SIZE(CdataEVal) + SIZE(ISbeamlist), &
+!!$          2*13*SIZE(CdataEVec)+2*13*SIZE(CdataEVal)+3*SIZE(ISbeamlist)+3*6*ADD_OUT_INFO
      GOTO 20
   ENDIF
 
@@ -903,16 +904,16 @@ SUBROUTINE WriteDataR_MPI( IChOutWrite, ipos,jpos, data, size, step, IErr)
   GOTO 9
 
   ! element by element
-  DO ind=1,size
-
-     CALL MPI_FILE_WRITE_SHARED(IChOutWrite, TRIM(outstring), LEN_TRIM(outstring), &
-          MPI_CHARACTER, my_status, IErr)
-     IF( IErr.NE.0 ) THEN
-        PRINT*,"WriteDataR_MPI(", my_rank, ") error ", IErr, &
-             " in MPI_FILE_WRITE_SHARED() for file handle ",IChOutWrite
-        RETURN
-     ENDIF
-  END DO
+!!$  DO ind=1,size
+!!$
+!!$     CALL MPI_FILE_WRITE_SHARED(IChOutWrite, TRIM(outstring), LEN_TRIM(outstring), &
+!!$          MPI_CHARACTER, my_status, IErr)
+!!$     IF( IErr.NE.0 ) THEN
+!!$        PRINT*,"WriteDataR_MPI(", my_rank, ") error ", IErr, &
+!!$             " in MPI_FILE_WRITE_SHARED() for file handle ",IChOutWrite
+!!$        RETURN
+!!$     ENDIF
+!!$  END DO
 
 9 RETURN
 
@@ -1036,7 +1037,7 @@ SUBROUTINE WriteDataC_MPI( IChOutWrite, ipos,jpos, Cdata, Isize, step, IErr)
 
   WRITE(SFormatString,*) &
        "(4(I7.1,1X),"//TRIM(ADJUSTL(TRIM(Sisize)))//"(1F13.10,1X), &
-       "//TRIM(ADJUSTL(TRIM(sisize)))//"(1F13.10,1X),A1)"
+       &"//TRIM(ADJUSTL(TRIM(sisize)))//"(1F13.10,1X),A1)"
   WRITE(outstring,FMT=SFormatString, ERR=20) my_rank,ipos,jpos,Isize,&
        REAL(Cdata,RKIND),AIMAG(Cdata), CHAR(10)
   CALL MPI_FILE_WRITE_SHARED(IChOutWrite, TRIM(outstring), LEN_TRIM(outstring), &

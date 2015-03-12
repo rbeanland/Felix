@@ -368,7 +368,7 @@ SUBROUTINE ReadInpFile( IErr )
 
      IRefineModeSelectionArray = 0
 
-     DO ind = 1,7
+     DO ind = 1,8
         WRITE(SStringFromNumber,'(I1)') ind-1
         IF(SCAN(SRefineMode,TRIM(ADJUSTL(SStringFromNumber))).NE.0) THEN
            IRefineModeSelectionArray(ind) = 1
@@ -377,7 +377,7 @@ SUBROUTINE ReadInpFile( IErr )
      
      IF((IWriteFLAG.GE.0.AND.my_rank.EQ.0).OR.IWriteFLAG.GE.10) THEN
         IF(IWriteFLAG.GE.4) THEN
-           DO ind = 1,7
+           DO ind = 1,IRefinementVariableTypes
               SRefineYESNO = 'NO'
               SELECT CASE (ind)
               CASE(1)
@@ -401,6 +401,9 @@ SUBROUTINE ReadInpFile( IErr )
               CASE(7)
                  IF(IRefineModeSelectionArray(ind).EQ.1) SRefineYESNO = 'YES'
                  PRINT*,"Refine Lattice Angles ",SRefineYESNO
+              CASE(8)
+                 IF(IRefineModeSelectionArray(ind).EQ.1) SRefineYESNO = 'YES'
+                 PRINT*,"Refine Convergence Angle ",SRefineYESNO
               END SELECT
            END DO
         ELSE
@@ -411,6 +414,10 @@ SUBROUTINE ReadInpFile( IErr )
      ILine= ILine+1
      READ(IChInp,10,ERR=20,END=30) IWeightingFLAG
      CALL Message ("ReadInpFile",IInfo,IErr,MessageVariable ="IWeightingFLAG",IVariable=IWeightingFLAG)
+     
+     ILine= ILine+1
+     READ(IChInp,10,ERR=20,END=30) IContinueFLAG
+     CALL Message ("ReadInpFile",IInfo,IErr,MessageVariable ="IContinueFLAG",IVariable=IContinueFLAG)
      
      ILine= ILine+1; READ(IChInp,ERR=20,END=30,FMT='(A)')
      ILine= ILine+1; READ(IChInp,ERR=20,END=30,FMT='(A)')
@@ -524,6 +531,7 @@ SUBROUTINE ReadInpFile( IErr )
      ILine= ILine+1
      READ(IChInp,10,ERR=20,END=30) IPrint
      CALL Message ("ReadInpFile",IInfo,IErr,MessageVariable ="IPrint",IVariable = IPrint)
+
      ILine= ILine+1; READ(IChInp,ERR=20,END=30,FMT='(A)')
      ILine= ILine+1; READ(IChInp,ERR=20,END=30,FMT='(A)')
      ILine= ILine+1; READ(IChInp,ERR=20,END=30,FMT='(A)')
@@ -698,7 +706,8 @@ SUBROUTINE ReadInpFile( IErr )
      PRINT*,""
      PRINT*,"#Refinement Specific Flags"
      PRINT*,"IRefineModeFLAG           = 0"
-     PRINT*,"IWeightingFLAG           = 0"
+     PRINT*,"IWeightingFLAG            = 0"
+     PRINT*,"IContinueFLAG             = 0"
      PRINT*,""
      PRINT*,"# Debye Waller Factor Iteration"
      PRINT*,""
@@ -981,8 +990,8 @@ SUBROUTINE ReadEigenSystemChunk( IAllocationChunk,IErr )
      WRITE(EIGENFORMAT,*) IInputBeams
 
      READ(ICHInp,END=100,ERR=20,FMT="((1F13.10,1X),(1F13.10,1X),&
-          "//TRIM(ADJUSTL(TRIM(EIGENFORMAT)))//"(1F13.10,1X), &
-          "//TRIM(ADJUSTL(TRIM(EIGENFORMAT)))//"(1F13.10,1X))", &
+          &"//TRIM(ADJUSTL(TRIM(EIGENFORMAT)))//"(1F13.10,1X), &
+          &"//TRIM(ADJUSTL(TRIM(EIGENFORMAT)))//"(1F13.10,1X))", &
           ADVANCE='YES') REigenValueRealTemp, REigenValueImagTemp,&     
           REigenVectorRealTemp,REigenVectorImagTemp
      CEigenVectorsChunk(IReadLine,IWriteLine,1:IInputBeams) = &
@@ -1129,21 +1138,21 @@ SUBROUTINE WriteOutInputFile (IErr)
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IBinorTextFLAG            = 0") 
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IScatterFactorMethodFLAG  = 0")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("ICentralBeamFLAG          = 1")
-     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IMaskFLAG                 = 0")
+     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IMaskFLAG                 = 1")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IZolzFLAG                 = 1")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IAbsorbFLAG               = 1")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IAnisoDebyeWallerFlag     = 0")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IBeamConvergenceFLAG      = 1")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IPseudoCubicFLAG          = 0")
-     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IXDirectionFLAG           = 1")
+     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IXDirectionFLAG           = 0")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("# radius of the beam in pixels")
-     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IPixelCount               = 64")
+     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IPixelCount               = 16")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("# beam selection criteria")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IMinReflectionPool        = 600")
-     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IMinStrongBeams           = 125")
-     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IMinWeakBeams             = 20")
+     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IMinStrongBeams           = 200")
+     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IMinWeakBeams             = 0")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("RBSBMax                   = 0.1")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("RBSPMax                   = 0.1")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("RConvergenceTolerance (%) = 1.0")
@@ -1168,17 +1177,17 @@ SUBROUTINE WriteOutInputFile (IErr)
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("# Image Output Options")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("")
-     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("RInitialThickness        = 300.0")
-     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("RFinalThickness          = 1300.0")
+     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("RInitialThickness        = 400.0")
+     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("RFinalThickness          = 700.0")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("RDeltaThickness          = 10.0")
-     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IReflectOut              = 49")
+     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IReflectOut              = 1")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("# felixrefine Input")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("#Refinement Specific Flags")
-     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IImageOutputFLAG          = 1")
-     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IDevFLAG                  = 0")
-     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IRefineModeFLAG           = 0")
+     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IRefineModeFLAG          = 0")
+     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IWeightingFLAG           = 0")
+     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IContinueFLAG            = 0")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("# Debye Waller Factor Iteration")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("")
@@ -1188,7 +1197,7 @@ SUBROUTINE WriteOutInputFile (IErr)
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("IElementsforDWFchange = {0}")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("# Ug Iteration")
-     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("INoofUgs                  = 1")
+     WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("INoofUgs                  = 10")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("RLowerBoundUgChange       = 50.0")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("RUpperBoundUgChange       = 50.0")
      WRITE(UNIT= IChInp,FMT='(A)') ADJUSTL("RDeltaUgChange            = 50.0")
@@ -1415,3 +1424,75 @@ SUBROUTINE DetermineRefineableAtomicSites(SAtomicSites,IErr)
   END IF
   
 END SUBROUTINE DetermineRefineableAtomicSites
+
+SUBROUTINE ReadExperimentalImages(IErr)
+
+ USE MyNumbers
+  
+  USE CConst; USE IConst; USE RConst
+  USE IPara; USE RPara; USE SPara; USE CPara
+  USE BlochPara
+
+  USE IChannels
+
+  USE MPI
+  USE MyMPI
+
+  IMPLICIT NONE
+  
+  INTEGER(IKIND) :: &
+       ind,IErr
+  CHARACTER*34 :: &
+       filename
+
+  DO ind = 1,IReflectOut
+     
+     WRITE(filename,"(A6,I3.3,A4)") "felix.",ind,".img"
+     
+     CALL OpenImageForReadIn(IErr,filename)  
+     IF( IErr.NE.0 ) THEN
+        PRINT*,"ReadExperimentalImages (", my_rank, ") error in OpenImageForReadIn()"
+        RETURN
+     END IF
+     
+     ALLOCATE( &
+          RImageIn(2*IPixelCount,2*IPixelCount), &
+          STAT=IErr)  
+     IF( IErr.NE.0 ) THEN
+        PRINT*,"ReadExperimentalImages (", my_rank, ") error in Allocation()"
+        RETURN
+     ENDIF
+     
+     CALL ReadImageForRefinement(IErr)  
+     IF( IErr.NE.0 ) THEN
+        PRINT*,"ReadExperimentalImages (", my_rank, ") error in ReadImageForRefinement()"
+        RETURN
+     ELSE
+        IF((IWriteFLAG.GE.6.AND.my_rank.EQ.0).OR.IWriteFLAG.GE.10) THEN
+           PRINT*,"Image Read In Successful"
+        END IF
+     ENDIF
+     
+     RImageExpi(:,:,ind) = RImageIn
+     
+     DEALLOCATE( &
+          RImageIn, &
+          STAT=IErr)  
+     IF( IErr.NE.0 ) THEN
+        PRINT*,"ReadExperimentalImages (", my_rank, ") error in deAllocation()"
+        RETURN
+     ENDIF
+
+     
+     CLOSE(IChInImage,IOSTAT=IErr) 
+     IF( IErr.NE.0 ) THEN
+        PRINT*,"ReadExperimentalImages (", my_rank, ") error in CLOSE()"
+        RETURN
+     END IF
+
+  END DO
+
+
+END SUBROUTINE ReadExperimentalImages
+
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

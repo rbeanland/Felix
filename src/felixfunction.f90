@@ -93,6 +93,7 @@ SUBROUTINE FelixFunction(RIndependentVariableValues,IIterationCount,IErr)
   ! Setup Image
   !--------------------------------------------------------------------
 
+
   CALL ImageSetup( IErr )
   IF( IErr.NE.0 ) THEN
      PRINT*,"Felixfunction(", my_rank, ") error in ImageSetup()"
@@ -104,6 +105,7 @@ SUBROUTINE FelixFunction(RIndependentVariableValues,IIterationCount,IErr)
   ! MAIN section
   !--------------------------------------------------------------------
  
+
   IF(IAbsorbFLAG.NE.0) THEN
      
      IAbsorbFLAG = 0
@@ -272,8 +274,8 @@ SUBROUTINE FelixFunction(RIndependentVariableValues,IIterationCount,IErr)
   END IF
 
   DO knd = ILocalPixelCountMin,ILocalPixelCountMax,1
-     ind = IPixelLocations(knd,1)
-     jnd = IPixelLocations(knd,2)
+     jnd = IPixelLocations(knd,1)
+     ind = IPixelLocations(knd,2)
      CALL BlochCoefficientCalculation(ind,jnd,knd,ILocalPixelCountMin,IErr)
      IF( IErr.NE.0 ) THEN
         PRINT*,"Felixfunction(", my_rank, ") error ", IErr, &
@@ -643,78 +645,6 @@ END SUBROUTINE FelixFunction
 
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-SUBROUTINE ReadExperimentalImages(IErr)
-
- USE MyNumbers
-  
-  USE CConst; USE IConst; USE RConst
-  USE IPara; USE RPara; USE SPara; USE CPara
-  USE BlochPara
-
-  USE IChannels
-
-  USE MPI
-  USE MyMPI
-
-  IMPLICIT NONE
-  
-  INTEGER(IKIND) :: &
-       ind,IErr
-  CHARACTER*34 :: &
-       filename
-
-  DO ind = 1,IReflectOut
-     
-     WRITE(filename,"(A6,I3.3,A4)") "felix.",ind,".img"
-     
-     CALL OpenImageForReadIn(IErr,filename)  
-     IF( IErr.NE.0 ) THEN
-        PRINT*,"ReadExperimentalImages (", my_rank, ") error in OpenImageForReadIn()"
-        RETURN
-     END IF
-     
-     ALLOCATE( &
-          RImageIn(2*IPixelCount,2*IPixelCount), &
-          STAT=IErr)  
-     IF( IErr.NE.0 ) THEN
-        PRINT*,"ReadExperimentalImages (", my_rank, ") error in Allocation()"
-        RETURN
-     ENDIF
-     
-     CALL ReadImageForRefinement(IErr)  
-     IF( IErr.NE.0 ) THEN
-        PRINT*,"ReadExperimentalImages (", my_rank, ") error in ReadImageForRefinement()"
-        RETURN
-     ELSE
-        IF((IWriteFLAG.GE.6.AND.my_rank.EQ.0).OR.IWriteFLAG.GE.10) THEN
-           PRINT*,"Image Read In Successful"
-        END IF
-     ENDIF
-     
-     RImageExpi(:,:,ind) = RImageIn
-     
-     DEALLOCATE( &
-          RImageIn, &
-          STAT=IErr)  
-     IF( IErr.NE.0 ) THEN
-        PRINT*,"ReadExperimentalImages (", my_rank, ") error in deAllocation()"
-        RETURN
-     ENDIF
-
-     
-     CLOSE(IChInImage,IOSTAT=IErr) 
-     IF( IErr.NE.0 ) THEN
-        PRINT*,"ReadExperimentalImages (", my_rank, ") error in CLOSE()"
-        RETURN
-     END IF
-
-  END DO
-
-
-END SUBROUTINE ReadExperimentalImages
-
-!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 SUBROUTINE CalculateFigureofMeritandDetermineThickness(RSimulatedImages,IThicknessCountFinal,IErr)
   
   USE MyNumbers
@@ -860,6 +790,10 @@ REAL(RKIND) FUNCTION SimplexFunction(RIndependentVariableValues,IIterationCount,
      RETURN
   ENDIF
   
+  IF (my_rank.EQ.0) THEN
+     CALL PrintVariables(IErr)
+  END IF
+
   CALL UpdateStructureFactors(RIndependentVariableValues,IErr)
   IF( IErr.NE.0 ) THEN
      PRINT*,"SimplexFunction(", my_rank, ") error ", IErr, &
@@ -873,7 +807,7 @@ REAL(RKIND) FUNCTION SimplexFunction(RIndependentVariableValues,IIterationCount,
           " in FelixFunction"
      RETURN
   ENDIF
-  
+
   IF(my_rank.EQ.0) THEN    
      
      ALLOCATE( &
@@ -912,7 +846,7 @@ REAL(RKIND) FUNCTION SimplexFunction(RIndependentVariableValues,IIterationCount,
      
      IF(IExitFLAG.EQ.1.OR.(IIterationCount.GE.(IPreviousPrintedIteration+IPrint))) THEN
         PRINT*,"I am Printing Because IExitFLAG = ",IExitFLAG,"and im",&
-             IPreviousPrintedIteration+IPrint,"Iterations from my last print"
+             IIterationCount-IPreviousPrintedIteration,"Iterations from my last print"
         IPreviousPrintedIteration = IIterationCount
         IThickness = RInitialThickness + (IThicknessIndex-1)*RDeltaThickness 
 
@@ -1074,10 +1008,76 @@ SUBROUTINE UpdateVariables(RIndependentVariableValues,IErr)
         CASE(3)
            RGamma = RIndependentVariableValues(ind)
         END SELECT
+     CASE(8)
+        RConvergenceAngle = RIndependentVariableValues(ind)
      END SELECT
   END DO
+
+ END SUBROUTINE UpdateVariables
+
+SUBROUTINE PrintVariables(IErr)
+
+  USE WriteToScreen
+  USE MyNumbers
   
-END SUBROUTINE UpdateVariables
+  USE CConst; USE IConst; USE RConst
+  USE IPara; USE RPara; USE SPara; USE CPara
+  USE BlochPara
+
+  USE IChannels
+
+  USE MPI
+  USE MyMPI
+
+  IMPLICIT NONE
+
+  INTEGER(IKIND) :: &
+       IErr,ind,IVariableType,jnd,knd
+
+  DO ind = 1,IRefinementVariableTypes
+     IF (IRefineModeSelectionArray(ind).EQ.1) THEN
+        SELECT CASE(ind)
+        CASE(1)
+           PRINT*,"Current Structure Factors"
+           DO jnd = 1,INoofUgs
+              PRINT*,CSymmetryStrengthKey(jnd)
+           END DO           
+        CASE(2)
+           PRINT*,"Current Atomic Coordinates"
+           DO jnd = 1,SIZE(RAtomSiteFracCoordVec,DIM=1)              
+              PRINT*,RAtomSiteFracCoordVec(jnd,:)
+           END DO        
+        CASE(3)
+           PRINT*,"Current Atomic Occupancy"
+           DO jnd = 1,SIZE(RAtomicSitePartialOccupancy,DIM=1)
+              PRINT*,RAtomicSitePartialOccupancy(jnd)
+           END DO
+        CASE(4)
+           PRINT*,"Current Isotropic Debye Waller Factors"
+           DO jnd = 1,SIZE(RIsotropicDebyeWallerFactors,DIM=1)
+              PRINT*,RIsotropicDebyeWallerFactors(jnd)
+           END DO
+        CASE(5)
+           PRINT*,"Current Anisotropic Debye Waller Factors"
+           DO jnd = 1,SIZE(RAnisotropicDebyeWallerFactorTensor,DIM=1)
+              DO knd = 1,3
+                 PRINT*,RAnisotropicDebyeWallerFactorTensor(jnd,knd,:)
+              END DO
+           END DO
+        CASE(6)
+           PRINT*,"Current Unit Cell Parameters"
+           PRINT*,RLengthX,RLengthY,RLengthZ
+        CASE(7)
+           PRINT*,"Current Unit Cell Angles"
+           PRINT*,RAlpha,RBeta,RGamma
+        CASE(8)
+           PRINT*,"Current Convergence Angle"
+           PRINT*,RConvergenceAngle
+        END SELECT
+     END IF
+  END DO
+
+END SUBROUTINE PrintVariables
 
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

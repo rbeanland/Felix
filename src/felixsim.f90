@@ -63,7 +63,7 @@ PROGRAM felixsim
   INTEGER(IKIND) :: &
        ind,jnd,hnd,knd,pnd,gnd,IErr, &
        IHours,IMinutes,ISeconds,IMilliSeconds,&
-       IThicknessIndex,  &
+       IThicknessIndex, &
        ILocalPixelCountMin, ILocalPixelCountMax
   INTEGER(IKIND), DIMENSION(:), ALLOCATABLE :: &
        IDisplacements,ICount
@@ -74,6 +74,7 @@ PROGRAM felixsim
        CAmplitudeandPhaseRoot
 
   CHARACTER*40 surname, my_rank_string 
+  CHARACTER*1000  SLocalPixelCountMin, SLocalPixelCountMax
 
 
   !-------------------------------------------------------------------
@@ -171,7 +172,6 @@ PROGRAM felixsim
  !    CALL OpenData_MPI(IChOutUM_MPI, "UM", surname, IErr)
   ENDIF
  
-
   !-------------------------------------------------------------------- 
   !Setup Experimental Variables
   !--------------------------------------------------------------------
@@ -267,12 +267,20 @@ PROGRAM felixsim
   ILocalPixelCountMin= (IPixelTotal*(my_rank)/p)+1
   ILocalPixelCountMax= (IPixelTotal*(my_rank+1)/p)
   
+  WRITE(SLocalPixelCountMin,"(I6.1)")ILocalPixelCountMin
+  WRITE(SLocalPixelCountMax,"(I6.1)")ILocalPixelCountMax
 
-  IF((IWriteFLAG.GE.6.AND.my_rank.EQ.0).OR.IWriteFLAG.GE.10) THEN
-     PRINT*,"felixsim(", my_rank, "): starting the eigenvalue problem"
-     PRINT*,"felixsim(", my_rank, "): for lines ", ILocalPixelCountMin, &
-          " to ", ILocalPixelCountMax
-  ENDIF
+
+  CALL Message("felixsim",IAllInfo,IErr,MessageString=": starting the eigenvalue problem")
+  CALL Message("felixsim",IAllInfo,IErr,MessageString="for lines " // &
+       TRIM(ADJUSTL(SLocalPixelCountMin)) // " to "// TRIM(ADJUSTL(SLocalPixelCountMax)))
+       
+
+!!$  IF((IWriteFLAG.GE.6.AND.my_rank.EQ.0).OR.IWriteFLAG.GE.10) THEN
+!!$     PRINT*,"felixsim(", my_rank, "): starting the eigenvalue problem"
+!!$     PRINT*,"felixsim(", my_rank, "): for lines ", ILocalPixelCountMin, &
+!!$          " to ", ILocalPixelCountMax
+!!$  ENDIF
   
 
   IThicknessCount= (RFinalThickness- RInitialThickness)/RDeltaThickness + 1
@@ -356,8 +364,8 @@ PROGRAM felixsim
   END IF
 
   DO knd = ILocalPixelCountMin,ILocalPixelCountMax,1
-     ind = IPixelLocations(knd,1)
-     jnd = IPixelLocations(knd,2)
+     ind = IPixelLocations(knd,2)
+     jnd = IPixelLocations(knd,1)
      CALL BlochCoefficientCalculation(ind,jnd,knd,ILocalPixelCountMin,IErr)
      IF( IErr.NE.0 ) THEN
         PRINT*,"felixsim(", my_rank, ") error ", IErr, &
@@ -368,10 +376,13 @@ PROGRAM felixsim
 
 !!$     reset message counter
   IMessageCounter = 0
-  
-  IF((IWriteFLAG.GE.6.AND.my_rank.EQ.0).OR.IWriteFLAG.GE.10) THEN
-     PRINT*,"felixsim : ",my_rank," is exiting calculation loop"
-  END IF
+
+  CALL Message("felixsim",IAllInfo,IErr,&
+       MessageString="is exiting calculation loop")
+
+  !IF((IWriteFLAG.GE.6.AND.my_rank.EQ.0).OR.IWriteFLAG.GE.10) THEN
+  !   PRINT*,"felixsim : ",my_rank," is exiting calculation loop"
+  !END IF
 
   !--------------------------------------------------------------------
   ! close outfiles
@@ -499,7 +510,7 @@ PROGRAM felixsim
   END IF
 
   IF(my_rank.EQ.0) THEN
-     CALL MontageSetup(IThicknessIndex,knd,ind,jnd,RFinalMontageImageRoot, &
+     CALL MontageSetup(RFinalMontageImageRoot, &
           RIndividualReflectionsRoot,IErr)
      IF( IErr.NE.0 ) THEN
         PRINT*,"felixsim(", my_rank, ") error ", IErr, &

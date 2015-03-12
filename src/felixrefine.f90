@@ -67,8 +67,6 @@ PROGRAM Felixrefine
        RSimplexFoM,RIndependentVariableValues
   REAL(RKIND) :: &
        RBCASTREAL
-!!$  CHARACTER*1 :: &
-!!$       SWyckoffSymbol
   INTEGER(IKIND),DIMENSION(:),ALLOCATABLE :: &
        IVectors
   REAL(RKIND) :: &
@@ -134,7 +132,7 @@ PROGRAM Felixrefine
   ! INPUT section 
   !--------------------------------------------------------------------
   
-  ISoftwareMode = 2 ! felixrefinemode
+  ISoftwareMode =2 ! felixrefinemode
   
   !Read from input files
   CALL ReadInput (IErr)
@@ -213,7 +211,8 @@ PROGRAM Felixrefine
        IRefineModeSelectionArray(4)*SIZE(IAtomicSitesToRefine)+&
        IRefineModeSelectionArray(5)*SIZE(IAtomicSitesToRefine)*6+&
        IRefineModeSelectionArray(6)*3+&
-       IRefineModeSelectionArray(7)*3
+       IRefineModeSelectionArray(7)*3+&
+       IRefineModeSelectionArray(8)
   
   ALLOCATE( &
        RImageExpi(2*IPixelCount,2*IPixelCount, &
@@ -229,6 +228,10 @@ PROGRAM Felixrefine
      PRINT*,"Felixrefine(", my_rank, ") error in ReadExperimentalImages()"
      GOTO 9999
   ENDIF
+
+  
+  ISoftwareMode =2 ! felixrefinemode
+  
 
   !--------------------------------------------------------------------
   ! Save Atomic Coordinates  
@@ -295,16 +298,14 @@ PROGRAM Felixrefine
      GOTO 9999
   ENDIF
   
-  IFelixCount = 0
+  IIterationCount = 0
 
-  CALL SimplexInitialisation(RSimplexVolume,RSimplexFoM,RIndependentVariableValues,1,RStandardDeviation,RMean,IErr)
+  CALL SimplexInitialisation(RSimplexVolume,RSimplexFoM,RIndependentVariableValues,IIterationCount,RStandardDeviation,RMean,IErr)
   IF( IErr.NE.0 ) THEN
      PRINT*,"felixrefine (", my_rank, ") error in SimplexInitialisation()"
      GOTO 9999
   ENDIF
-
-  IFelixCount = 0
-
+     
   !--------------------------------------------------------------------
   ! Apply Simplex Method
   !--------------------------------------------------------------------
@@ -394,7 +395,7 @@ USE MyNumbers
 
   INTEGER(IKIND) :: &
        ind,jnd,IErr,ICalls
-  INTEGER(IKIND),DIMENSION(7) :: &
+  INTEGER(IKIND),DIMENSION(IRefinementVariableTypes) :: &
        INoofelementsforeachrefinementtype
 
   INoofelementsforeachrefinementtype(1) = &
@@ -410,6 +411,8 @@ USE MyNumbers
        IRefineModeSelectionArray(6)*3
   INoofelementsforeachrefinementtype(7) = &
        IRefineModeSelectionArray(7)*3
+  INoofelementsforeachrefinementtype(8) = &
+       IRefineModeSelectionArray(8)
 
   ALLOCATE(&
        IIterativeVariableUniqueIDs(IIndependentVariables,5),&
@@ -422,8 +425,7 @@ USE MyNumbers
   IIterativeVariableUniqueIDs = 0
   ICalls = 0
 
-  DO ind = 1,7 !Loop over all possible iterative variables
-!!$     PRINT*,"INoofelementsforeachrefinementtype =",INoofelementsforeachrefinementtype(ind)
+  DO ind = 1,IRefinementVariableTypes !Loop over all possible iterative variables
      IF(IRefineModeSelectionArray(ind).EQ.1) THEN
         DO jnd = 1,INoofelementsforeachrefinementtype(ind)
            ICalls = ICalls + 1
@@ -432,10 +434,6 @@ USE MyNumbers
         END DO
      END IF
   END DO
-
-!!$  PRINT*,"IIndependentVariables =",IIndependentVariables
-!!$
-!!$  PRINT*,IIterativeVariableUniqueIDs
   
 END SUBROUTINE AssignIterativeIDs
 
@@ -461,7 +459,7 @@ SUBROUTINE AssignArrayLocationsToIterationVariables(IIterativeVariableType,IVari
        IAnisotropicDebyeWallerFactorElementNo
   INTEGER(IKIND),DIMENSION(IIndependentVariables,5),INTENT(OUT) :: &
        IArrayToFill  
-  INTEGER(IKIND),DIMENSION(7) :: &
+  INTEGER(IKIND),DIMENSION(IRefinementVariableTypes) :: &
        INoofelementsforeachrefinementtype
 
 !!$  Calculate How Many of Each Variable Type There are
@@ -469,7 +467,7 @@ SUBROUTINE AssignArrayLocationsToIterationVariables(IIterativeVariableType,IVari
   INoofelementsforeachrefinementtype(1) = &
        IRefineModeSelectionArray(1)*INoofUgs
   INoofelementsforeachrefinementtype(2) = &
-       IRefineModeSelectionArray(2)*SIZE(IAtomicSitesToRefine)*3
+       IRefineModeSelectionArray(2)*IAllowedVectors
   INoofelementsforeachrefinementtype(3) = &
        IRefineModeSelectionArray(3)*SIZE(IAtomicSitesToRefine)
   INoofelementsforeachrefinementtype(4) = &
@@ -480,6 +478,8 @@ SUBROUTINE AssignArrayLocationsToIterationVariables(IIterativeVariableType,IVari
        IRefineModeSelectionArray(6)*3
   INoofelementsforeachrefinementtype(7) = &
        IRefineModeSelectionArray(7)*3
+  INoofelementsforeachrefinementtype(8) = &
+       IRefineModeSelectionArray(8)
   
 !!$  Where am I in the Array Right Now?
 
@@ -550,6 +550,10 @@ SUBROUTINE AssignArrayLocationsToIterationVariables(IIterativeVariableType,IVari
      IArrayToFill(IArrayIndex,3) = &
           NINT(3.D0*(REAL(IVariableNo/3.0D0,RKIND)-CEILING(REAL(IVariableNo/3.0D0,RKIND)))+3.0D0)
 
+  CASE(8)
+     
+     IArrayToFill(IArrayIndex,2) = IIterativeVariableType
+     
   END SELECT
   
 END SUBROUTINE AssignArrayLocationsToIterationVariables
@@ -623,6 +627,9 @@ SUBROUTINE RefinementVariableSetup(RIndependentVariableValues,IErr)
         CASE(3)
            RIndependentVariableValues(ind) = RGamma
         END SELECT
+     CASE(8)
+        RIndependentVariableValues(ind) = &
+             RConvergenceAngle
      END SELECT
   END DO
 
@@ -693,7 +700,6 @@ SUBROUTINE RankSymmetryRelatedStructureFactor(IErr)
      PRINT*,"RankSymmetryRelatedStructureFactor(",my_rank,")"
   END IF
   
-
   ALLOCATE( &  
        ISymmetryRelations(nReflections,nReflections), &
        STAT=IErr)
@@ -749,7 +755,7 @@ SUBROUTINE SimplexInitialisation(RSimplexVolume,RSimplexFoM,RIndependentVariable
        SimplexFunction,RSimplexDummy
   REAL(RKIND),DIMENSION(IIndependentVariables),INTENT(INOUT) :: &
        RIndependentVariableValues
-  INTEGER(IKIND),INTENT(IN) :: &
+  INTEGER(IKIND),INTENT(INOUT) :: &
        IIterationCount
   REAL(RKIND),INTENT(OUT) :: &
        RStandardDeviation,RMean
@@ -771,7 +777,7 @@ SUBROUTINE SimplexInitialisation(RSimplexVolume,RSimplexFoM,RIndependentVariable
      PRINT*,"SimplexInitialisation(", my_rank, ") error in InitialiseWeightingCoefficients()"
      RETURN
   ENDIF
-  
+
   CALL RefinementVariableSetup(RIndependentVariableValues,IErr)
   IF( IErr.NE.0 ) THEN
      PRINT*,"SimplexInitialisation(", my_rank, ") error in RefinementVariableSetup()"
@@ -797,48 +803,66 @@ SUBROUTINE SimplexInitialisation(RSimplexVolume,RSimplexFoM,RIndependentVariable
      PRINT*,"SimplexInitialisation (", my_rank, ") error in Deallocation()"
      RETURN
   ENDIF
-  DO ind = 1,(IIndependentVariables+1)
-     RSimplexVolume(ind,:) = &
-          RIndependentVariableValues
-     IF(ind.GT.1) THEN
-        IF(IIterativeVariableUniqueIDs(ind-1,2).EQ.2) THEN
-           CALL InitialiseAtomicVectorMagnitudes(ind-1,RSimplexVolume(ind,ind-1),IErr)
-        ELSE
-           RSimplexVolume(ind,ind-1) = RIndependentVariableValues(ind-1)*&
-                (ONE+RSimplexLengthScale)
+
+  IF(IContinueFLAG.EQ.0) THEN
+     
+     DO ind = 1,(IIndependentVariables+1)
+        RSimplexVolume(ind,:) = &
+             RIndependentVariableValues
+        IF(ind.GT.1) THEN
+           IF(IIterativeVariableUniqueIDs(ind-1,2).EQ.2) THEN
+              CALL InitialiseAtomicVectorMagnitudes(ind-1,RSimplexVolume(ind,ind-1),IErr)
+           ELSE
+              RSimplexVolume(ind,ind-1) = RIndependentVariableValues(ind-1)*&
+                   (ONE+RSimplexLengthScale)
+           END IF
         END IF
-     END IF
-  END DO
-
-  IPreviousPrintedIteration = -IPrint ! Ensures print out on first iteration
-
-  DO ind = 1,(IIndependentVariables+1)
-          
-     IF((IWriteFLAG.GE.0.AND.my_rank.EQ.0).OR.IWriteFLAG.GE.10) THEN
-        PRINT*,"---------------------------------------------------------"
-        PRINT*,"-------- Simplex",ind,"of",IIndependentVariables+1
-        PRINT*,"---------------------------------------------------------"
-     END IF     
-
-     RSimplexDummy = SimplexFunction(RSimplexVolume(ind,:),1,0,IErr)
-
-     RStandardTolerance = RStandardError(RStandardDeviation,RMean,RSimplexDummy,IErr)
+     END DO
      
-     RSimplexFoM(ind) =  RSimplexDummy
+     IPreviousPrintedIteration = -IPrint ! Ensures print out on first iteration
+
+     DO ind = 1,(IIndependentVariables+1)
+        
+        IF((IWriteFLAG.GE.0.AND.my_rank.EQ.0).OR.IWriteFLAG.GE.10) THEN
+           PRINT*,"---------------------------------------------------------"
+           PRINT*,"-------- Simplex",ind,"of",IIndependentVariables+1
+           PRINT*,"---------------------------------------------------------"
+        END IF
+        
+        RSimplexDummy = SimplexFunction(RSimplexVolume(ind,:),1,0,IErr)
+        
+        RStandardTolerance = RStandardError(RStandardDeviation,RMean,RSimplexDummy,IErr)
+        
+        RSimplexFoM(ind) =  RSimplexDummy
+        
+        IF((IWriteFLAG.GE.0.AND.my_rank.EQ.0).OR.IWriteFLAG.GE.10) THEN
+           PRINT*,"---------------------------------------------------------"
+           PRINT*,"-------- Figure of Merit" ,RSimplexFoM(ind)        
+           PRINT*,"---------------------------------------------------------"
+        END IF
+     END DO
      
-     IF((IWriteFLAG.GE.0.AND.my_rank.EQ.0).OR.IWriteFLAG.GE.10) THEN
-        PRINT*,"---------------------------------------------------------"
-        PRINT*,"-------- Figure of Merit" ,RSimplexFoM(ind)        
-        PRINT*,"---------------------------------------------------------"
-     END IF
-  END DO
+  ELSE
      
+     CALL RecoverSavedSimplex(RSimplexVolume,RSimplexFoM,RStandardDeviation,RMean,IIterationCount,IErr)
+     IF( IErr.NE.0 ) THEN
+        PRINT*,"SimplexInitialisation (", my_rank, ") error in RecoverSavedSimplex()"
+        RETURN
+     ENDIF
+     
+  END IF
+       
 END SUBROUTINE SimplexInitialisation
 
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 SUBROUTINE PerformDummySimulationToSetupSimplexValues(IErr)
-  
+
+!!$  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!!$  % Calls setup subroutines to initialise Structure factors for 
+!!$  % use in initialisation of simplex
+!!$  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
   USE MyNumbers
   
   USE CConst; USE IConst; USE RConst
@@ -1106,8 +1130,16 @@ SUBROUTINE PerformDummySimulationToSetupSimplexValues(IErr)
 
 END SUBROUTINE PerformDummySimulationToSetupSimplexValues
 
+!!$  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 SUBROUTINE InitialiseAtomicVectorMagnitudes(IVariableID,RCorrectedMovement,IErr)
   
+!!$  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!!$  % Creates pseudo random movements of atoms using allowed vectors
+!!$  % to initialise the simplex, proposed movements which exit the unit
+!!$  $ cell are corrected to bring the atom back in on the opposite side
+!!$  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
   USE MyNumbers
   
   USE CConst; USE IConst; USE RConst
@@ -1125,8 +1157,8 @@ SUBROUTINE InitialiseAtomicVectorMagnitudes(IVariableID,RCorrectedMovement,IErr)
        IErr,ind,IVariableID
   REAL(RKIND) :: &
        RNegativeMovement,RPositiveMovement,RCorrectedMovement,RANDOMNUMBER
-  RNegativeMovement = -0.1_RKIND
-  RPositiveMovement = 0.1_RKIND
+  RNegativeMovement = RSimplexLengthScale*(-1.0_RKIND)
+  RPositiveMovement = RSimplexLengthScale
 
   IF(RANDOMNUMBER(IVariableID,IErr).LT.0.5_RKIND) THEN
      CALL OutofUnitCellCheck(IVariableID,RNegativeMovement,RCorrectedMovement,IErr)
@@ -1136,7 +1168,13 @@ SUBROUTINE InitialiseAtomicVectorMagnitudes(IVariableID,RCorrectedMovement,IErr)
 
 END SUBROUTINE InitialiseAtomicVectorMagnitudes
 
+!!$  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 REAL(RKIND) FUNCTION RANDOMNUMBER(IRequestedNumber,IErr)
+
+!!$  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!!$  % Sets up a pseudo random sequence and selects a number
+!!$  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
   USE MyNumbers
   
@@ -1155,8 +1193,6 @@ REAL(RKIND) FUNCTION RANDOMNUMBER(IRequestedNumber,IErr)
        IErr,values(1:8), k,IRequestedNumber
   INTEGER(IKIND), DIMENSION(:), ALLOCATABLE :: &
        seed
-!!$  REAL(RKIND) :: &
-!!$       RANDOMNUMBER
   REAL(RKIND),DIMENSION(IRequestedNumber) :: &
        RRandomNumberSequence
   
@@ -1180,7 +1216,16 @@ REAL(RKIND) FUNCTION RANDOMNUMBER(IRequestedNumber,IErr)
   
 END FUNCTION RANDOMNUMBER
 
+!!$  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 SUBROUTINE OutofUnitCellCheck(IVariableID,RProposedMovement,RCorrectedMovement,IErr)
+
+!!$  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!!$  % Checks that vector movement applied by the simplex initialisation
+!!$  % does not move an atom out fo the unit cell, and if it does
+!!$  % the atom is moved back into the unit cell on the opposite side
+!!$  % as if the atom had moved from one unit cell into the neighbouring one
+!!$  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
   USE MyNumbers
   
@@ -1233,6 +1278,8 @@ SUBROUTINE OutofUnitCellCheck(IVariableID,RProposedMovement,RCorrectedMovement,I
 
 END SUBROUTINE OutofUnitCellCheck
 
+!!$  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 SUBROUTINE ApplyNewStructureFactors(IErr)
 
 !!$  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1270,20 +1317,15 @@ SUBROUTINE ApplyNewStructureFactors(IErr)
      END WHERE
   END DO
 
-!!$  Apply hermiticity because ISymmtryRelations is triangular
-
-!!$  CUgMatDummy = CUgMatDummy + CONJG(TRANSPOSE(CUgMatDummy))
-
-!!$  CUgMatDummy is now a sparse matrix containing only the new values of Ug
-
   WHERE(ABS(CUgMatDummy).GT.TINY)
      CUgMat = CUgMatDummy
   END WHERE
 
 !!$  CUgMat now contains the new values from the iterative process 
   
-
 END SUBROUTINE ApplyNewStructureFactors
+
+!!$  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 SUBROUTINE CreateIdentityMatrix(IIdentityMatrix,ISize,IErr)
 
@@ -1317,3 +1359,55 @@ SUBROUTINE CreateIdentityMatrix(IIdentityMatrix,ISize,IErr)
   END DO
 
 END SUBROUTINE CreateIdentityMatrix
+
+!!$  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+SUBROUTINE RecoverSavedSimplex(RSimplexVolume,RSimplexFoM,RStandardDeviation,RMean,IIterationCount,IErr)
+
+!!$  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!!$  % This Subroutine reads the fr-simplex.txt file from a previous
+!!$  % refinement run, and recreates the simplex volume and tolerances
+!!$  % allowing for the continuation of a previous refinement
+!!$  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+  USE MyNumbers
+  
+  USE CConst; USE IConst; USE RConst
+  USE IPara; USE RPara; USE SPara; USE CPara
+  USE BlochPara
+
+  USE IChannels
+
+  USE MPI
+  USE MyMPI
+
+  IMPLICIT NONE
+
+  INTEGER(IKIND) :: &
+       IErr,ind,IIterationCount
+  REAL(RKIND),DIMENSION(IIndependentVariables+1,IIndependentVariables) :: &
+       RSimplexVolume
+  REAL(RKIND),DIMENSION(IIndependentVariables+1) :: &
+       RSimplexFoM
+  REAL(RKIND) :: &
+       RStandardDeviation,RMean
+  CHARACTER*200 :: &
+       CSizeofData,SFormatString,filename
+
+  WRITE(filename,*) "fr-Simplex.txt"
+
+  OPEN(UNIT=IChOutSimplex,STATUS='UNKNOWN',&
+        FILE=TRIM(ADJUSTL(filename)))
+  
+  WRITE(CSizeofData,*) IIndependentVariables+1
+  WRITE(SFormatString,*) "("//TRIM(ADJUSTL(CSizeofData))//"(1F6.3,1X),A1)"
+
+  DO ind = 1,(IIndependentVariables+1)
+     READ(IChOutSimplex,FMT=SFormatString) RSimplexVolume(ind,:),RSimplexFoM(ind)
+  END DO
+    
+  READ(IChOutSimplex,FMT="(2(1F6.3,1X),I5.1,I5.1,A1)") RStandardDeviation,RMean,IStandardDeviationCalls,IIterationCount
+
+  CLOSE(IChOutSimplex)
+
+END SUBROUTINE RecoverSavedSimplex
