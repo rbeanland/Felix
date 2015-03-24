@@ -10,7 +10,7 @@ hklfile=felix.hkl
 
 #Name of Job
 #-----------
-Job_Name= FS_Strong_Weak#job name here (FS... or FR...)
+Job_Name= FS_Strong_Weak
 
 
 #Directory Input
@@ -268,7 +268,18 @@ export IPATH_NO_CPUAFFINITY=1
 # Launch the parallel job, ${ranks} MPI ranks in ${taskspernode} tasks per node with ${ompthreads} threads
 
 echo "--- starting the SIM run"
-mpirun ./$exe < ./\${PBS_ARRAYID}.inp/felix.inp
+mpirun ./$exe < ./\${PBS_ARRAYID}.inp/felix.inp > ./\${PBS_ARRAYID.inp/
+
+wait
+
+jobfilenumber=0
+
+for StrongBeamsind2 in 25 50 75 100 125 150 175 200 225 250 275 300
+do
+for WeakBeamsind2 in 10 20 30 40 50 60 70 80 90 100 110 120 130 140
+do
+
+jobfilenumber=\${jobfilenumber}+1
 
 echo "--- starting the IMAGE post-processing run"
 pwd
@@ -278,19 +289,23 @@ echo "--- starting the image part"
 
 # copy the result of the run in the detination for safekeeping
 
-targetdir=${submitdir}/`basename ${job_file} .sh`/
+targetdir=${submitdir}/`basename ${job_file} .sh`/FelixOut_\${StrongBeamsind2}_\${WeakBeamsind2}
 
 [ -d \${targetdir} ] || mkdir -p \${targetdir}
 
-cp -vr * \${targetdir}
+cp -vr ./\${jobfilenumber}.inp/* \${targetdir}
 
-echo "copying output files from" 
-pwd
-echo "to \${targetdir}" 
+echo "copying output files from" \${jobfilenumber}.inp
+echo "to \${targetdir}"
+ 
+done
+done
 
 wait
 #exit 0
 EOD
+
+
 
 #job submission arguments, uncomment queue required
 
