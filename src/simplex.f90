@@ -260,14 +260,14 @@ SUBROUTINE WriteOutSimplex(RSimplexVolume,RSimplexFoM,IDimensions,RStandardDevia
        CSizeofData,SFormatString
   
   WRITE(CSizeofData,*) IDimensions+1
-  WRITE(SFormatString,*) "("//TRIM(ADJUSTL(CSizeofData))//"(1F6.3,1X),A1)"
+  WRITE(SFormatString,*) "("//TRIM(ADJUSTL(CSizeofData))//"(1F9.6,1X),A1)"
 
   DO ind = 1,(IDimensions+1)
      RData = (/RSimplexVolume(ind,:), RSimplexFoM(ind)/)
      WRITE(IChOutSimplex,FMT=SFormatString) RData
   END DO
 
-  WRITE(IChOutSimplex,FMT="(2(1F6.3,1X),I5.1,I5.1,A1)") RStandardDeviation,RMean,IStandardDeviationCalls,IIterations
+  WRITE(IChOutSimplex,FMT="(2(1F9.6,1X),I5.1,I5.1,A1)") RStandardDeviation,RMean,IStandardDeviationCalls,IIterations
 
   CLOSE(IChOutSimplex)
 

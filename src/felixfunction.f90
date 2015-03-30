@@ -120,13 +120,17 @@ SUBROUTINE FelixFunction(RIndependentVariableValues,IIterationCount,IErr)
 
   END IF
 
-  CALL ApplyNewStructureFactors(IErr)
-  IF( IErr.NE.0 ) THEN
-     PRINT*,"Felixfunction(", my_rank, ") error ", IErr, &
-          " in ApplyNewStructureFactors()"
-     RETURN
-  ENDIF
 
+  IF(IRefineModeSelectionArray(1).EQ.1) THEN
+     
+     CALL ApplyNewStructureFactors(IErr)
+     IF( IErr.NE.0 ) THEN
+        PRINT*,"Felixfunction(", my_rank, ") error ", IErr, &
+             " in ApplyNewStructureFactors()"
+        RETURN
+     ENDIF
+     
+  END IF
 
   IF(IAbsorbFLAG.NE.0) THEN
      
@@ -794,12 +798,17 @@ REAL(RKIND) FUNCTION SimplexFunction(RIndependentVariableValues,IIterationCount,
      CALL PrintVariables(IErr)
   END IF
 
-  CALL UpdateStructureFactors(RIndependentVariableValues,IErr)
-  IF( IErr.NE.0 ) THEN
-     PRINT*,"SimplexFunction(", my_rank, ") error ", IErr, &
-          " in UpdateStructureFactors"
-     RETURN
-  ENDIF
+
+  IF(IRefineModeSelectionArray(1).EQ.1) THEN
+     
+     CALL UpdateStructureFactors(RIndependentVariableValues,IErr)
+     IF( IErr.NE.0 ) THEN
+        PRINT*,"SimplexFunction(", my_rank, ") error ", IErr, &
+             " in UpdateStructureFactors"
+        RETURN
+     ENDIF
+
+  END IF
 
   CALL FelixFunction(RIndependentVariableValues,IIterationCount,IErr) ! Simulate !!  
   IF( IErr.NE.0 ) THEN
@@ -1033,6 +1042,8 @@ SUBROUTINE PrintVariables(IErr)
 
   INTEGER(IKIND) :: &
        IErr,ind,IVariableType,jnd,knd
+  CHARACTER*200 :: &
+       SPrintString
 
   DO ind = 1,IRefinementVariableTypes
      IF (IRefineModeSelectionArray(ind).EQ.1) THEN
@@ -1044,35 +1055,42 @@ SUBROUTINE PrintVariables(IErr)
            END DO           
         CASE(2)
            PRINT*,"Current Atomic Coordinates"
-           DO jnd = 1,SIZE(RAtomSiteFracCoordVec,DIM=1)              
-              PRINT*,RAtomSiteFracCoordVec(jnd,:)
+           DO jnd = 1,SIZE(RAtomSiteFracCoordVec,DIM=1)
+              WRITE(SPrintString,FMT='(3(F9.6,1X))'),RAtomSiteFracCoordVec(jnd,:)
+              PRINT*,TRIM(ADJUSTL(SPrintString))
            END DO        
         CASE(3)
            PRINT*,"Current Atomic Occupancy"
            DO jnd = 1,SIZE(RAtomicSitePartialOccupancy,DIM=1)
-              PRINT*,RAtomicSitePartialOccupancy(jnd)
+              WRITE(SPrintString,FMT='((F9.6,1X))'),RAtomicSitePartialOccupancy(jnd)
+              PRINT*,TRIM(ADJUSTL(SPrintString))
            END DO
         CASE(4)
            PRINT*,"Current Isotropic Debye Waller Factors"
            DO jnd = 1,SIZE(RIsotropicDebyeWallerFactors,DIM=1)
-              PRINT*,RIsotropicDebyeWallerFactors(jnd)
+              WRITE(SPrintString,FMT='((F9.6,1X))'),RIsotropicDebyeWallerFactors(jnd)
+              PRINT*,TRIM(ADJUSTL(SPrintString))
            END DO
         CASE(5)
            PRINT*,"Current Anisotropic Debye Waller Factors"
            DO jnd = 1,SIZE(RAnisotropicDebyeWallerFactorTensor,DIM=1)
               DO knd = 1,3
-                 PRINT*,RAnisotropicDebyeWallerFactorTensor(jnd,knd,:)
+                 WRITE(SPrintString,FMT='((F9.6,1X))'),RAnisotropicDebyeWallerFactorTensor(jnd,knd,:)
+              PRINT*,TRIM(ADJUSTL(SPrintString))
               END DO
            END DO
         CASE(6)
            PRINT*,"Current Unit Cell Parameters"
-           PRINT*,RLengthX,RLengthY,RLengthZ
+           WRITE(SPrintString,FMT='(3(F9.6,1X))'),RLengthX,RLengthY,RLengthZ
+              PRINT*,TRIM(ADJUSTL(SPrintString))
         CASE(7)
            PRINT*,"Current Unit Cell Angles"
-           PRINT*,RAlpha,RBeta,RGamma
+           WRITE(SPrintString,FMT='(3(F9.6,1X))'),RAlpha,RBeta,RGamma
+              PRINT*,TRIM(ADJUSTL(SPrintString))
         CASE(8)
            PRINT*,"Current Convergence Angle"
-           PRINT*,RConvergenceAngle
+           WRITE(SPrintString,FMT='((F9.6,1X))'),RConvergenceAngle
+              PRINT*,TRIM(ADJUSTL(SPrintString))
         END SELECT
      END IF
   END DO
@@ -1140,7 +1158,7 @@ SUBROUTINE ConvertVectorMovementsIntoAtomicCoordinates(IVariableID,RIndependentV
 
 !!$  Use IAtomID to applied the IVectodID Vector to the IAtomID atomic coordinate
   
-  RAtomSiteFracCoordVec(IAtomID,:) = RAtomSiteFracCoordVec(IAtomID,:) + &
+  RAtomSiteFracCoordVec(IAtomID,:) = RInitialAtomSiteFracCoordVec(IAtomID,:) + &
        RIndependentVariableValues(IVariableID)*RAllowedVectors(IVectorID,:)
   
 END SUBROUTINE ConvertVectorMovementsIntoAtomicCoordinates

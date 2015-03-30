@@ -465,7 +465,7 @@ SUBROUTINE AssignArrayLocationsToIterationVariables(IIterativeVariableType,IVari
 !!$  Calculate How Many of Each Variable Type There are
 
   INoofelementsforeachrefinementtype(1) = &
-       IRefineModeSelectionArray(1)*INoofUgs
+       IRefineModeSelectionArray(1)*INoofUgs*2
   INoofelementsforeachrefinementtype(2) = &
        IRefineModeSelectionArray(2)*IAllowedVectors
   INoofelementsforeachrefinementtype(3) = &
@@ -777,24 +777,30 @@ SUBROUTINE SimplexInitialisation(RSimplexVolume,RSimplexFoM,RIndependentVariable
      PRINT*,"SimplexInitialisation(", my_rank, ") error in InitialiseWeightingCoefficients()"
      RETURN
   ENDIF
-
+  
   CALL RefinementVariableSetup(RIndependentVariableValues,IErr)
   IF( IErr.NE.0 ) THEN
      PRINT*,"SimplexInitialisation(", my_rank, ") error in RefinementVariableSetup()"
      RETURN
   ENDIF
+  
+  
+  IF(IRefineModeSelectionArray(1).EQ.1) THEN
+  
+   CALL RankSymmetryRelatedStructureFactor(IErr)
 
-  CALL RankSymmetryRelatedStructureFactor(IErr)
-  IF( IErr.NE.0 ) THEN
-     PRINT*,"SimplexInitialisation(", my_rank, ") error in RankSymmetryRelatedStructureFactor()"
-     RETURN
-  ENDIF
+     IF( IErr.NE.0 ) THEN
+        PRINT*,"SimplexInitialisation(", my_rank, ") error in RankSymmetryRelatedStructureFactor()"
+        RETURN
+     ENDIF
+     
+     CALL StructureFactorRefinementSetup(RIndependentVariableValues,IIterationCount,IErr)
+     IF( IErr.NE.0 ) THEN
+        PRINT*,"SimplexInitialisation(", my_rank, ") error in StructureFactorRefinementSetup()"
+        RETURN
+     ENDIF
 
-  CALL StructureFactorRefinementSetup(RIndependentVariableValues,IIterationCount,IErr)
-  IF( IErr.NE.0 ) THEN
-     PRINT*,"SimplexInitialisation(", my_rank, ") error in StructureFactorRefinementSetup()"
-     RETURN
-  ENDIF
+  END IF
 
   DEALLOCATE(&
        CUgmat,&
@@ -1400,13 +1406,13 @@ SUBROUTINE RecoverSavedSimplex(RSimplexVolume,RSimplexFoM,RStandardDeviation,RMe
         FILE=TRIM(ADJUSTL(filename)))
   
   WRITE(CSizeofData,*) IIndependentVariables+1
-  WRITE(SFormatString,*) "("//TRIM(ADJUSTL(CSizeofData))//"(1F6.3,1X),A1)"
+  WRITE(SFormatString,*) "("//TRIM(ADJUSTL(CSizeofData))//"(1F9.6,1X),A1)"
 
   DO ind = 1,(IIndependentVariables+1)
      READ(IChOutSimplex,FMT=SFormatString) RSimplexVolume(ind,:),RSimplexFoM(ind)
   END DO
     
-  READ(IChOutSimplex,FMT="(2(1F6.3,1X),I5.1,I5.1,A1)") RStandardDeviation,RMean,IStandardDeviationCalls,IIterationCount
+  READ(IChOutSimplex,FMT="(2(1F9.6,1X),I5.1,I5.1,A1)") RStandardDeviation,RMean,IStandardDeviationCalls,IIterationCount
 
   CLOSE(IChOutSimplex)
 
