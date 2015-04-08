@@ -49,7 +49,7 @@ SUBROUTINE BlochCoefficientCalculation(IYPixelIndex,IXPixelIndex,IPixelNumber,IF
   
 
   INTEGER(IKIND) :: &
-       IYPixelIndex,IXPixelIndex,hnd,knd,IPixelNumber,pnd,&
+       IYPixelIndex,IXPixelIndex,hnd,knd,IPixelNumber,pnd,fnd, &
        ierr,IThickness, &
        IThicknessIndex, ILowerLimit, &
        IUpperLimit,IFirstPixelToCalculate       
