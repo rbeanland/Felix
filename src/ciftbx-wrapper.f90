@@ -788,6 +788,6443 @@ C
 
       END MODULE CIFtbxsys
       
+      MODULE CIF2CIF
+
+      CONTAINS
+      
+      
+      character*1 mydelim
+      integer ixname,iyname,ii,ipdata,ipsave,kkr,kkrl
+      integer kreqnam,lreqnam,kpass,markdb,kbstrt,lbstrt
+      integer nblen,kkp,krr,krrl,jpsave
+      integer kfold, kprevpos, knextpos, krord
+      integer basedepth,ndepth,pposdlm,recdlm
+      double precision dpn,dpesd
+C
+      VERS='2.0.0 (29 Nov 2009)'
+C
+C     Initialization of variables
+C
+      xxtab = char(5)
+      if (ichar('a')-ichar('A') .gt.0) xxtab = char(9)
+      iuninp = 2
+      iunout = 6
+      iundac = 3
+      iunerr = 0
+      iunrql = 4
+      nreqnam = 0
+      tabl_ = .false.
+      pfold_ = 0
+      unfold_ = .false.
+      align_ = .false.
+      tabx_ = .false.
+      ptabx_ = .false.
+      pdecp_ = .false.
+      plzero_ = .false.
+      guesst = .true.
+      kbstrt = -1
+      kprevpos = 0
+      knextpos = 8
+      koffset = 0
+      basedepth = 0
+      krr = 0
+      result = init_(iuninp,iunout,iundac,iunerr)
+      call getfiles
+      kfold = line_
+      if (pfold_.gt.0 .and. pfold_.lt.line_) 
+     * kfold = min(line_,max(20,pfold_))
+      if (tabl_) align_ = .true.
+      isline = line_
+      line_ = 2048
+      if (ckdict(1:lckdict).ne.' ')
+     *  result = dict_(ckdict(1:lckdict),'valid dtype '//cats)
+      line_ = isline
+      if (inpcif(1:linpcif).eq.'-' .or. 
+     *  inpcif(1:linpcif) .eq. ' ') then
+        iuninp = 5
+        inpcif = ' '
+        xvc=vcheck
+        xtc=tcheck
+        result = init_(iuninp,iunout,iundac,iunerr)
+        vcheck=xvc
+        tcheck=xtc
+      endif
+C
+C     Open input CIF
+C
+      result = ocif_(inpcif(1:linpcif))
+      if(.not.result) then
+        call c2cerr(
+     *  ' failed to open '//inpcif(1:linpcif))
+      endif
+      if (nblen(reqlst).gt.0) then
+        if (reqlst(1:lreqlst).eq.'-') then
+          iunrql = 5
+        else
+          open(unit=iunrql,file=reqlst(1:lreqlst),status='old',
+     *      err=150)
+          go to 160
+150       call c2cerr(' Unable to open request list '//
+     *      reqlst(1:lreqlst))
+          go to 190
+        endif
+160     kkr = MAXBUF+1
+        kkrl = 0
+        kkp = 1
+170     if (kkr.gt.kkrl) then
+          read(iunrql,'(a)',end=180) string
+          kkr = 1
+          kkrl = nblen(string)
+          go to 170
+        endif
+        c = string(kkr:kkr)
+        kkr = kkr+1
+        if (kkp.eq.1.and.(c.eq.' '.or.c.eq.xxtab)) go to 170
+        if (kkp.eq.1.and.c.eq.'#') then
+          kkr = kkrl+1
+          go to 170
+        endif
+        if (kkp.gt.1.and.(c.eq.' '.or.c.eq.xxtab)) go to 175
+        if (ichar(c).ge.ichar('A')
+     *    .and.ichar(c).le.ichar('Z'))
+     *    c = char(ichar(c)+ichar('a')-ichar('A'))
+        if (kkp.le.NUMCHRR) then
+          temp(kkp:kkp) = c
+          kkp=kkp+1
+        endif
+        if (kkr.le.kkrl) go to 170
+175     nreqnam = nreqnam+1
+        if (nreqnam .le. NUMREQ) then
+          reqnam(nreqnam) = temp(1:kkp-1)
+        else
+          call c2cerr(' More than NUMREQ items in request list')
+        endif
+        kkp = 1
+        go to 170
+180     if (reqlst(1:lreqlst).ne.'-') close(unit=iunrql)
+      endif
+190   continue
+C
+C     open output CIF
+C
+      if (outcif(1:loutcif).eq.'-')  outcif = ' '
+      result=pfile_(outcif(1:loutcif))
+      if(.not.result) then
+        call c2cerr(
+     *  ' failed to open '//outcif(1:loutcif))
+      endif
+      result=pcmnt_(' CIF Copied by cif2cif, version '// VERS)
+      result=find_(' ','head',string)
+      ipsave=0
+      markdb=0
+      kreqnam = 1
+C
+C     This is the main loop.  return to 199 for a full new pass
+C
+199   kpass = 1
+      lreqnam = kreqnam
+      lbstrt = kbstrt
+      blok = ' '
+      if(markdb.ne.0 .and.nreqnam.ne.0)result=bkmrk_(markdb)
+C
+200   if (nreqnam.eq.0) then
+        call cpcmnt
+        result=data_(' ')
+        if(.not.result) go to 900
+        do ii = 1,nname
+          ipcnt(ii) = 1
+          irord(ii) = ii
+        enddo
+      else
+        if (kreqnam.gt.nreqnam) go to 900
+        if (reqnam(kreqnam)(1:5).eq.'data_') then
+          blok = reqnam(kreqnam)(6:NUMCHRR)
+          temp = blok
+          if (blok.eq.'which_contains:') temp = ' '
+          result = data_(temp)
+          if (.not.result) then
+C
+C           We have failed to find the requested block
+C
+C           If we have made a full circle on a blank name or
+C           the block was named, all we can do is report
+C           the failure
+C
+            if (kpass.eq.2.or.temp.ne.' ') then
+              call c2cwarn(' Did not find '//
+     *          reqnam(kreqnam))
+              kreqnam = kreqnam+1
+              go to 200
+            else
+C
+C           If we failed on the first pass on a blank name
+C           make a second pass from the front of the CIF
+C
+              kpass = kpass+1
+              result = find_(' ','head',string)
+              go to 200
+            endif
+          endif
+          kbstrt = recn_
+          result=bkmrk_(markdb)
+        else
+          kreqnam = kreqnam+1
+          go to 200
+        endif
+C
+C       Process the list of tags for this block, expanding
+C       wild-card requests
+C
+        do ii = 1,nname
+          ipcnt(ii) = 0
+        enddo
+        krr = 1
+C
+210     kreqnam = kreqnam+1
+        if (kreqnam.gt.nreqnam) go to 220
+        if (reqnam(kreqnam)(1:5).eq.'data_') go to 220
+        krrl = nblen(reqnam(kreqnam))
+        if (reqnam(kreqnam)(krrl:krrl).eq.'_') then
+          do ii = 1,nname
+          if (dname(ii)(1:krrl).eq.
+     *      reqnam(kreqnam)(1:krrl) ) then
+            ipcnt(ii) = ipcnt(ii)+1
+            if (krr.gt.NUMCHRR)
+     *        call c2cerr(' Number of tags greater than NUMCHRR')
+            irord(krr) = ii
+            krr = krr+1
+          endif
+          enddo
+        else
+          call hash_find(reqnam(kreqnam)(1:krrl),
+     *     dname,dchain,NUMBLOCK,nname,dhash,NUMHASH,
+     *     ii)
+          if (ii.gt.0) then
+            if (krr.gt.NUMCHRR)
+     *        call c2cerr(' Number of tags greater than NUMCHRR')
+            irord(krr) = ii
+            krr = krr+1
+          else
+            call c2cwarn(' No match to requested name '//
+     *      reqnam(kreqnam)(1:krrl))
+            if (krr.gt.NUMCHRR)
+     *        call c2cerr(' Number of tags greater than NUMCHRR')
+            irord(krr) = -kreqnam
+            krr = krr+1
+          endif
+        endif
+        go to 210
+C
+220     krr = krr-1
+        if (krr.le.0) then
+          if (blok.ne.'which_contains:'.or.
+     *      (kpass.eq.2.and.kbstrt.ge.lbstrt)) then
+            call c2cwarn(' No tags requested from block '//bloc_)
+            go to 199
+          else
+            kreqnam = lreqnam
+            go to 200
+          endif
+        endif
+      endif
+C
+      ipdata=posnam_
+      jpsave=ipsave
+      ipsave=posval_
+      string=bloc_
+      saveo_=save_
+      globo_=glob_
+      result=pdata_(string)
+      if(.not.result) then
+        call c2cwarn(
+     *  ' duplicate data block '//bloc_)
+        pposnam_ = 40
+        result=pcmnt_
+     *    ('<---- duplicate data block')
+      endif
+      ixname=1
+      if (nreqnam.eq.0) krr = nname
+250   if(ixname.le.krr) then
+        loop_ = .false.
+        krord = 0
+        do ii = 1,nname
+        ipdup(ii) = 0
+        enddo
+        if (irord(ixname).gt.0) krord = nloop(irord(ixname)) 
+        if(krord.ne.0) then
+        ipdup(irord(ixname)) = 1
+255       if(jpsave.eq.0 .and.nreqnam.eq.0) call cpcmnt
+          jpsave = 0
+          if (nreqnam.eq.0) then
+          result=find_(' ',' ',string)
+          if(type_.ne.'loop') then
+            call c2cwarn(' Expected loop_, found: '//string)
+            go to 255
+          endif
+          else
+          posval_ = 1
+          endif
+          pposval_=posval_
+          result=ploop_(' ')
+          iyname=ixname
+          if (irord(ixname).lt.0) go to 260
+          do ii = ixname+1,krr
+            if (irord(ii).lt.0) then
+              krord=nloop(irord(ixname))
+            else
+              krord=nloop(irord(ii))
+            endif
+            if (nloop(irord(ixname)).ne.
+     *        krord) go to 260
+            if (irord(ii).gt.0) then
+              if (ipdup(irord(ii)).gt.0) go to 260
+            endif
+            iyname=ii
+            if (irord(ii).gt.0) then
+              ipdup(irord(ii)) = 1
+            endif
+          enddo
+260       continue
+          if (nreqnam .ne.0) result = pcmnt_(' ')
+          do ii = ixname,iyname
+            if (nreqnam.eq.0) then
+            call cpcmnt
+            result=find_(' ','name',string)
+            if(tbxxlocs(string).ne.dname(irord(ii))) then
+              call c2cwarn(' Expected '
+     *         //dname(irord(ii))(1:lastnb(dname(irord(ii))))
+     *         //', found '
+     *         //string(1:lastnb(string)))
+            endif
+            else
+              if (irord(ii).gt.0) then
+                result=find_(dname(irord(ii)),'name',string)
+              endif
+            endif
+            if (irord(ii).gt.0) then
+              if(.not.tabl_) pposnam_=posnam_
+              result=ploop_(string(1:max(1,lastnb(string))))
+            else
+              if(.not.tabl_) pposnam_ = 1
+              result = ploop_(reqnam(-irord(ii)))
+              pposnam_ = 40
+              result=pcmnt_
+     *         ('<---- requested item not present')
+            endif
+          enddo
+          if (nreqnam.ne.0) then
+          result = bkmrk_(markdb)
+          result = bkmrk_(markdb)
+          endif
+270       do ii = ixname,iyname
+            pquote_ = ' '
+            if (nreqnam.eq.0) then
+              if (unfold_.and.kprevpos.ne.0) then
+                call cpcmnt2
+              else
+                call cpcmnt
+              endif
+            endif
+            if (irord(ii).gt.0) then
+              testfl = 'no '
+              result=test_(dname(irord(ii)))
+              basedepth = 0
+CDBG          print *,' Calling test_ ',dname(irord(ii))
+              if (type_.eq.'numb'.and.(.not.guesst)) then
+                if (.not.dtype_(dname(irord(ii)),mytype)) type_='char'
+              endif
+CDBG          print *,' post test_ type_ ',type_
+            else
+              type_ = 'null'
+            endif
+            if (ii .eq. ixname .and. posval_ .lt. 17) then
+              kprevpos=0
+              knextpos=8
+              koffset=0
+            endif
+            if(.not.tabl_) then
+              pposval_=mod(posval_-koffset-1,kfold)+1
+              if (unfold_) then
+                pposval_=max(8-mod(kprevpos+7,8)
+     *            +kprevpos,posval_-koffset)
+                pposval_=max(pposval_,knextpos)
+                pposval_=mod(pposval_-1,kfold)+1
+              endif
+              pposend_=0
+              if (posend_.gt.0)
+     *          pposend_=pposval_+(posend_-posval_)
+            endif
+275         continue
+            if (depth_.le.basedepth .and.depth_.gt.0) then
+              if (delim_(depth_,mydelim,pposdlm,recdlm)) then
+                result = pdelim_(mydelim,.false.,pposdlm)
+                call cpbcmnt(pposdlm,recdlm) 
+              endif
+              basedepth = depth_
+            end if
+            if(type_.eq.'null') then
+            testfl = 'no '
+            if (depth_.gt.basedepth) then
+              do ndepth = basedepth+1,depth_
+              if (delim_(ndepth,mydelim,pposdlm,recdlm)) then
+                result = pdelim_(mydelim,.false.,pposdlm)
+                call cpbcmnt(pposdlm,recdlm)
+              endif
+              enddo
+              basedepth = depth_
+            endif
+            if(.not.tabl_) then
+              pposval_=mod(posval_-koffset-1,kfold)+1
+              if (unfold_) then
+                pposval_=max(8-mod(kprevpos+7,8)
+     *            +kprevpos,posval_-koffset)
+                pposval_=max(pposval_,knextpos)
+                pposval_=mod(pposval_-1,kfold)+1
+                if(pposval_+long_.gt.kfold) then
+                  kprevpos=0
+                  knextpos=1
+                  pposval_=1
+                  koffset=posval_-1
+                endif
+                kprevpos=pposval_
+                koffset=posval_-pposval_
+                knextpos=mod(kprevpos+3,kfold)+1
+              endif
+              pposend_=0
+              if (posend_.gt.0) then
+                 pposend_=pposval_+(posend_-posval_)
+                 knextpos=mod(max(knextpos,pposend_+2)-1,kfold)+1
+              endif
+            endif
+              if (irord(ii).lt.0) then
+                 result=pchar_(' ','?')
+              else
+              if (long_.eq.1.and.strg_(1:1).eq.'?') then
+                 result=pchar_(' ','?')
+              else
+                 result=pchar_(' ','.')
+              endif
+              endif
+              if (depth_.eq.0) then
+                type_=' '
+              else
+                call cpcmnt
+                if (depth_.gt.0) then
+                  result=test_(dname(irord(ii)))
+                  go to 275
+                else
+                  type_=' '
+                end if
+              end if
+            endif
+            if(type_.eq.'char') then
+CDBG          print *,' handling as char at basedepth ',basedepth
+              result=char_(dname(irord(ii)),string)
+              if (depth_.gt.basedepth) then
+                do ndepth = basedepth+1,depth_
+                if (delim_(ndepth,mydelim,pposdlm,recdlm)) then
+                  result = pdelim_(mydelim,.false.,pposdlm)
+                  call cpbcmnt(pposdlm,recdlm)
+                endif
+                enddo
+                basedepth = depth_
+              endif
+              pquote_=quote_
+              if(.not.tabl_) then
+              pposval_=mod(posval_-koffset-1,kfold)+1
+              if (unfold_) then
+                pposval_=max(8-mod(kprevpos+7,8)
+     *            +kprevpos,posval_-koffset)
+                pposval_=max(pposval_,knextpos)
+                pposval_=mod(pposval_-1,kfold)+1
+                  if(pposval_+long_.gt.kfold) then
+                  kprevpos=0
+                  knextpos=1
+                  pposval_=1
+                  koffset=posval_-1
+                endif
+                kprevpos=pposval_
+                koffset=posval_-pposval_
+                knextpos=mod(kprevpos+3,kfold)+1
+              endif
+              pposend_=0
+              if (posend_.gt.0) then
+                 pposend_=pposval_+(posend_-posval_)
+                 knextpos=mod(max(knextpos,pposend_+4)-1,kfold)+1
+              endif
+              endif
+              if(string.eq.'?'.or.string.eq.'.') then
+                if(pquote_.eq.' ') pquote_=''''
+              endif
+              if (depth_.eq.0) then
+                result=pchar_(' ',string(1:max(1,lastnb(string))))
+                type_=' '
+              else
+                result=pchar_(char(0),string(1:max(1,lastnb(string))))
+                call cpcmnt
+                if (depth_.gt.0) then
+                  result=test_(dname(irord(ii)))
+                  go to 275
+                else
+                  type_=' '
+                end if
+              end if
+            endif
+            if(type_.eq.'text') then
+280           result=char_(dname(irord(ii)),string)
+              if (depth_.gt.basedepth) then
+                do ndepth = basedepth+1,depth_
+                if (delim_(ndepth,mydelim,pposdlm,recdlm)) then
+                  result = pdelim_(mydelim,.false.,pposdlm)
+                  call cpbcmnt(pposdlm,recdlm)
+                endif
+                enddo
+                basedepth = depth_
+              endif
+              if (depth_.eq.0) then
+                if (type_.eq.'text') 
+     *            result=ptext_(' ',string(1:max(1,lastnb(string))))
+                if(text_) go to 280
+                call tbxxeot
+                type_=' '
+                kprevpos = 0
+              else
+                if (type_.eq.'text') 
+     *          result=ptext_(char(0),string(1:max(1,lastnb(string))))
+                if(text_) go to 280
+                call tbxxeot
+                call cpcmnt
+                if (depth_.gt.0) then
+                  result=test_(dname(irord(ii)))
+                  go to 275
+                else
+                  type_=' '
+                end if
+              end if
+            endif
+            if(type_.eq.'numb') then
+CDBG          print *,' processing numb', basedepth
+              dpesd = 0.D0
+              result=numd_(dname(irord(ii)),dpn,dpesd)
+              if (depth_.gt.basedepth) then
+                do ndepth = basedepth+1,depth_
+                if (delim_(ndepth,mydelim,pposdlm,recdlm)) then
+CDBG              print *,' numb delim ',mydelim
+                  result = pdelim_(mydelim,.false.,pposdlm)
+                  call cpbcmnt(pposdlm,recdlm)
+                endif
+                enddo
+                basedepth = depth_
+              endif
+              if(.not.tabl_) then
+              pposval_=mod(posval_-1-koffset,kfold)+1
+              if (unfold_) then
+                pposval_=max(8-mod(kprevpos+7,8)
+     *            +kprevpos,posval_-koffset)
+                pposval_=max(pposval_,knextpos)
+                pposval_=mod(pposval_-1,kfold)+1
+                if(pposval_+long_.gt.kfold) then
+                  kprevpos=0
+                  knextpos=1
+                  pposval_=1
+                  koffset=posval_-1
+                endif
+                kprevpos=pposval_
+                koffset=posval_-pposval_
+                knextpos=mod(kprevpos+3,kfold)+1
+              endif
+              pposend_=0
+              if (posend_.gt.0) then
+                 pposend_=pposval_+(posend_-posval_)
+                 knextpos=mod(max(knextpos,pposend_+2)-1,kfold)+1
+              endif
+              pposdec_=0
+              if (posdec_.gt.0)
+     *          pposdec_ = pposval_+(posdec_-posval_)
+              endif
+              pesddig_=esddig_
+              pdecp_=decp_
+              plzero_=lzero_
+              if (depth_.eq.0) then
+                result=pnumd_(' ',dpn,dpesd)
+                type_=' '
+              else
+                result=pnumd_(char(0),dpn,dpesd)
+                call cpcmnt
+                if (depth_.gt.0) then
+                  result=test_(dname(irord(ii)))
+                  go to 275
+                else
+                  type_=' '
+                end if
+              end if
+            endif
+          enddo
+          if (nreqnam.ne.0) result=pcmnt_(char(0))
+          if(loop_) go to 270
+          ixname=iyname+1
+          if (nreqnam.ne.0) result=pcmnt_(' ')
+          go to 250
+        else
+          if(jpsave.eq.0 .and.nreqnam.eq.0) call cpcmnt
+          jpsave=0
+          if (nreqnam.eq.0) then
+          result=name_(temp)
+          else
+          if (irord(ixname).lt.0) then
+            temp = reqnam(-irord(ixname))
+            if (.not.tabl_) pposnam_ = 1
+            result = pchar_(temp,'?')
+            pposnam_ = 40
+            result=pcmnt_
+     *      ('<---- requested item not present')
+            ixname = ixname+1
+            go to 250
+          endif
+          result =find_(dname(irord(ixname)),'name',temp)
+          endif
+          if(.not.result)
+     *      call c2cerr(' misaligned data item '//
+     *      dname(irord(ixname)))
+          if (nreqnam.eq.0) call cpcmnt
+          basedepth = 0
+          result=test_(dname(irord(ixname)))
+285       if (type_.eq.'numb'.and.(.not.guesst)) then
+              if (.not.dtype_(dname(irord(ixname)),mytype)) type_='char'
+          endif
+          if (depth_.le.basedepth .and.depth_.gt.0) then
+            if (delim_(depth_,mydelim,pposdlm,recdlm)) then
+              result = pdelim_(mydelim,.false.,pposdlm)
+              call cpbcmnt(pposdlm,recdlm)
+            endif
+            basedepth = depth_
+          end if
+          if(type_.eq.'null') then
+            result=char_(dname(irord(ixname)),string)
+            if (depth_.gt.basedepth) then
+              if (basedepth.eq.0) then
+                pposnam_=0
+                if (posnam_.gt.0)
+     *            pposnam_ = pposval_+(posnam_-posval_)
+                if (pposnam_ .lt. 0) pposnam_ = 1
+                result=pchar_(temp,char(0))
+              end if
+              do ndepth = basedepth+1,depth_
+              if (delim_(ndepth,mydelim,pposdlm,recdlm)) then
+                result = pdelim_(mydelim,.false.,pposdlm)
+                call cpbcmnt(pposdlm,recdlm)
+              endif
+              enddo
+              basedepth = depth_           
+            endif
+            if (.not.tabl_) then
+              pposval_=mod(posval_-1,kfold)+1
+              pposend_=0
+              if (posend_.gt.0)
+     *          pposend_=pposval_+(posend_-posval_)
+              pposnam_=0
+              if (posnam_.gt.0)
+     *          pposnam_ = pposval_+(posnam_-posval_)
+              if (pposnam_ .lt. 0) pposnam_ = 1
+            endif
+            if (long_.eq.1.and.strg_(1:1).eq.'?') then
+               if (depth_.eq. 0) then
+                 result=pchar_(temp,'?')
+               else
+                 result=pchar_(char(0),'?')
+               end if
+            else
+               if (depth_.eq. 0) then
+                 result=pchar_(temp,'.')
+               else
+                 result=pchar_(char(0),'.')
+               end if
+            endif
+            if (depth_.eq.0) then 
+              type_=' '
+            else
+              call cpcmnt
+              if (depth_.gt.0) then
+                result = test_(dname(irord(ixname)))
+                if (.not.(type_.eq.'null'.and.depth_.eq.0))
+     *          go to 285
+              end if
+              type_=' '
+            endif
+          endif  
+          if(type_.eq.'char') then
+            result=char_(dname(irord(ixname)),string)
+CDBG        print *,' item as read: ',string(1:lastnb(string))
+            if (depth_.gt.basedepth) then
+              if (basedepth.eq.0) then
+                pposnam_=0
+                if (posnam_.gt.0)
+     *            pposnam_ = pposval_+(posnam_-posval_)
+                if (pposnam_ .lt. 0) pposnam_ = 1
+                result=pchar_(temp,char(0))
+              end if
+              do ndepth = basedepth+1,depth_
+              if (delim_(ndepth,mydelim,pposdlm,recdlm)) then
+CDBG            print *, ' ndepth,mydelim,pposdlm ',
+CDBG *            ndepth,mydelim,pposdlm
+                result = pdelim_(mydelim,.false.,pposdlm)
+                call cpbcmnt(pposdlm,recdlm)
+              endif
+              enddo
+              basedepth = depth_
+            endif
+            pquote_=quote_
+            if (.not.tabl_) then
+              pposval_=mod(posval_-1,kfold)+1
+              pposend_=0
+              if (posend_.gt.0)
+     *          pposend_=pposval_+(posend_-posval_)
+              pposnam_=0
+              if (posnam_.gt.0)
+     *          pposnam_ = pposval_+(posnam_-posval_)
+              if (pposnam_ .lt. 0) pposnam_ = 1
+            endif
+            if(string.eq.'?'.or.string.eq.'.') then
+              if(pquote_.eq.' ') pquote_=''''
+            endif
+            if (depth_.eq.0) then
+              result=pchar_(temp,string(1:max(1,lastnb(string))))
+              type_=' '
+            else
+              result=pchar_(char(0),string(1:max(1,lastnb(string))))
+CDBG          print *, 'depth before cpcmnt ', depth_
+              call cpcmnt
+              if (depth_.gt.0) then
+                result = test_(dname(irord(ixname)))
+                if (.not.(type_.eq.'null'.and.depth_.eq.0))
+     *          go to 285
+              end if
+              type_=' '
+            end if
+          endif
+          if(type_.eq.'text') then
+290         result=char_(dname(irord(ixname)),string)
+            if (depth_.gt.basedepth) then
+              if (basedepth.eq.0) then
+                pposnam_=0
+                if (posnam_.gt.0)
+     *            pposnam_ = pposval_+(posnam_-posval_)
+                if (pposnam_ .lt. 0) pposnam_ = 1
+                result=pchar_(temp,char(0))
+              end if
+              do ndepth = basedepth+1,depth_
+              if (delim_(ndepth,mydelim,pposdlm,recdlm)) then
+                result = pdelim_(mydelim,.false.,pposdlm)
+                call cpbcmnt(pposdlm,recdlm) 
+              endif
+              enddo
+              basedepth = depth_
+            endif
+            if (.not.tabl_) pposnam_=posnam_
+            if (depth_.eq.0) then
+              if (type_.eq.'text')
+     *        result=ptext_(temp,string(1:max(1,lastnb(string))))
+              if(text_) go to 290
+              call tbxxeot
+              type_=' '
+            else
+              if (type_.eq.'text')
+     *        result=ptext_(char(0),string(1:max(1,lastnb(string))))
+              if (text_) go to 290
+              call tbxxeot
+CDBG          print *, 'depth before cpcmnt ', depth_
+              call cpcmnt
+              if (depth_.gt.0) then
+                result = test_(dname(irord(ixname)))
+                if (.not.(type_.eq.'null'.and.depth_.eq.0))
+     *          go to 285
+              end if
+              type_=' '
+            end if
+          endif
+          if(type_.eq.'numb') then
+            dpesd=0.D0
+            result=numd_(dname(irord(ixname)),dpn,dpesd)
+            if (depth_.gt.basedepth) then
+              if (basedepth.eq.0) then
+                pposnam_=0
+                if (posnam_.gt.0)
+     *            pposnam_ = pposval_+(posnam_-posval_)
+                if (pposnam_ .lt. 0) pposnam_ = 1
+                result=pchar_(temp,char(0))
+              end if
+              do ndepth = basedepth+1,depth_
+              if (delim_(ndepth,mydelim,pposdlm,recdlm)) then
+                result = pdelim_(mydelim,.false.,pposdlm)
+                call cpbcmnt(pposdlm,recdlm) 
+              endif
+              enddo
+              basedepth = depth_
+            endif
+            if (.not.tabl_) then
+              pposval_=mod(posval_-1,kfold)+1
+              pposend_=0
+              if (posend_.gt.0)
+     *          pposend_=pposval_+(posend_-posval_)
+              pposdec_ = 0
+              if (posdec_.gt.0)
+     *          pposdec_=pposval_+(posdec_-posval_)
+              if (posnam_.gt.0)
+     *          pposnam_ = pposval_+(posnam_-posval_)
+              if (pposnam_ .lt. 0) pposnam_ = 1
+            endif
+            pdecp_=decp_
+            plzero_=lzero_
+            pesddig_=esddig_
+            if (depth_.eq.0) then
+              result=pnumd_(temp,dpn,dpesd)
+              type_=' '
+            else
+              result=pnumd_(char(0),dpn,dpesd)
+CDBG          print *, 'depth before cpcmnt ', depth_
+              call cpcmnt
+              if (depth_.gt.0) then
+                result = test_(dname(irord(ixname)))
+                if (.not.(type_.eq.'null'.and.depth_.eq.0))
+     *          go to 285
+              end if
+              type_=' '
+            end if
+          endif
+        endif
+        ixname=ixname+1
+        go to 250
+      endif
+      if (nreqnam.eq.0) call cpcmnt
+      pposnam_=ipdata
+      pposval_=ipsave
+      result=pdata_(' ')
+      if(nreqnam.gt.0) then
+        result=pcmnt_(' ')
+        result=pcmnt_('           ---end-of-data-block--- ')
+        result=pcmnt_(' ')
+        result=pcmnt_(' ')
+      endif
+      if(ipsave.gt.0) then
+        irecd=lrecd+1
+        jrecd=-1
+      endif
+      jchar=MAXBUF
+      go to 199
+900   call cpcmnt
+      call close_
+      stop
+
+C
+      END
+C
+C
+      subroutine cpbcmnt(posdlm,recdlm)
+C
+C     Fudge to back up and copy the comments, if any,
+C     after a delimter and prior to the current position
+C
+      include 'cif2cif.cmn'
+      integer  posdlm
+      integer  recdlm
+      logical  cotdb_
+      logical  pcmnt_
+      logical  isdlm
+      logical  pdelim_
+      integer  lstring
+      include 'ciftbx.cmv'
+      character*(MAXBUF) string
+100   result=cotdb_(string,lstring,isdlm,posdlm,recdlm)
+      if (result) then
+        if (isdlm) then
+          result = pdelim_(string(1:1),.false.,posval_)
+        else
+          pposnam_ = posnam_
+          pquote_=quote_
+          result=pcmnt_(string(1:lstring))
+        end if
+        goto 100
+      endif
+      return
+      end
+C
+C
+      subroutine cpcmnt
+C
+C     routine to copy a set of comments (if any) from the
+C     input cif to the output cif
+C
+      include 'cif2cif.cmn'
+      logical  cotd_
+      logical  pcmnt_
+      logical  isdlm
+      logical  pdelim_
+      include 'ciftbx.cmv'
+      character*(MAXBUF) string
+      call tbxxbtab
+100   result=cotd_(string,isdlm)
+      if (result) then
+        if (isdlm) then
+          result = pdelim_(string,.false.,posval_)
+        else
+          pposnam_ = posnam_
+          pquote_=quote_
+          result=pcmnt_(string(1:long_))
+        end if
+        goto 100
+      endif
+      call tbxxetab
+      return
+      end
+C
+C
+      subroutine cpcmnt2
+C
+C     routine to copy a set of comments (if any) from the
+C     input cif to the output cif within a loop_ row
+C     do not copy empty comments
+C
+      include 'cif2cif.cmn'
+      logical  cotd_
+      logical  pcmnt_
+      logical  isdlm
+      logical  pdelim_
+      external pdelim_
+      include 'ciftbx.cmv'
+      character*(MAXBUF) string
+      character*1 xxtab
+      xxtab = char(5)
+      if (ichar('a')-ichar('A') .gt.0) xxtab = char(9)
+      call tbxxbtab
+100   result=cotd_(string,isdlm)
+      if (result) then
+        if(isdlm) then
+          result = pdelim_(string,.false.,posval_)
+          go to 100
+        else
+        if(quote_.eq.'#' .or.
+     *    ( string(1:long_).ne.char(0) .and.
+     *      string(1:long_).ne.xxtab.and.
+     *      string(1:long_).ne.' ')) then
+          pposnam_ = posnam_
+          pquote_=quote_
+          result=pcmnt_(string(1:long_))
+          goto 100
+        endif
+        endif
+      endif
+      call tbxxetab
+      return
+      end
+C
+C
+      subroutine getfiles
+C
+C     This routine, derived from the similar routine in cif2pdb
+C     by H. J. Bernstein and F. C. Bernstein, is used to control
+C     initial processing of command line arguments and envrionment
+C     variables
+C
+C     On systems lacking a unix style iargc and getarg, provide
+C     equivalent routines.  At the very least, you will need
+C     to have iargc() return 0 (for no command line arguments)
+C     and have getarg(karg,strg) return a null-terminated
+C     empty string in strg.
+C
+C     On systems lacking a unix-style getenv, provide a dummy
+C     routine returning a null-terminated empty string
+C
+C     
+C
+      integer  nblen
+      logical  dict_
+      logical  prefx_
+      include 'cif2cif.cmn'
+      include 'ciftbx.cmv'
+      character*256 temp,temp2,cline
+      character*10 bfill
+      character*11 temp3
+      character*2 temp4
+      integer iargc,ll,karg,kfarg,nfarg,
+     *  ifound,iwant,isi,iso,isd,isq,ii
+      logical backarg,ffile
+      data bfill/'          '/
+      numarg = iargc()
+      call getenv('CIF2CIF_INPUT_CIF',inpcif)
+      call getenv('CIF2CIF_OUTPUT_CIF',outcif)
+      call getenv('CIF2CIF_CHECK_DICTIONARY',ckdict)
+      call getenv('CIF2CIF_REQUEST_LIST',reqlst)
+      cats = 'catno'
+      karg = 0
+      kfarg = 0
+      iwant = 0
+      ifound = 0
+      isi = 0
+      iso = 0
+      isd = 0
+      isq = 0
+      backarg = .false.
+      ffile = .false.
+ 100  if(.not.ffile) then
+        karg = karg+1
+        if (karg.le.numarg) then
+          if (.not.backarg) then
+            call getarg(karg,temp)
+            temp2 = ' '
+          else
+            temp = temp2
+            backarg = .false.
+          endif
+        else
+          go to 500
+        endif
+      else
+        go to 300
+ 200    close(unit=iuninp)
+        ffile = .false.
+        go to 100
+ 300    kfarg = kfarg+1
+        if (kfarg.gt.nfarg) then
+          read(iuninp,'(a)',end=200) cline
+          call splitstr(nfarg,cline,cstr,128,' ')
+          kfarg = 0
+          go to 300
+        else
+          if (.not.backarg) then
+            temp = cstr(kfarg)
+            temp2 = ' '
+          else
+            temp = temp2
+            backarg = .false.
+          endif
+        endif
+      endif
+      ll = nblen(temp)
+      if (ll.eq.0) then
+        temp = ' '
+        ll = 1
+      endif
+      if (iwant.ne.0) then
+        if (iwant.eq.1) inpcif = temp(1:ll)
+        if (iwant.eq.2) outcif = temp(1:ll)
+        if (iwant.eq.3) then
+          ckdict = temp(1:ll)
+          lckdict = max(1,nblen(ckdict))
+          isline = line_
+          line_ = 2048
+          result = dict_(ckdict(1:lckdict),'valid dtype '//cats)
+          line_ = isline
+          ckdict = ' '
+          lckdict = 1
+        endif
+        if (iwant.eq.4) then
+          if(temp(1:ll).eq.'F.' .or. temp(1:ll).eq.'f' .or.
+     *      temp(1:ll).eq.'0' .or. temp(1:ll).eq.'N' .or.
+     *      temp(1:ll).eq.'n') then
+            aliaso_=.false.
+          else
+            if(temp(1:ll).eq.'T.' .or. temp(1:ll).eq.'t' .or.
+     *      temp(1:ll).eq.'1' .or. temp(1:ll).eq.'Y' .or.
+     *      temp(1:ll).eq.'y') then
+              aliaso_=.true.
+            else
+              go to 900
+            endif
+          endif
+        endif
+        if (iwant.eq.5) then
+          open(unit=iuninp,file=temp(1:ll),status='OLD',err=900)
+          kfarg = 1
+          nfarg = 0
+          ffile = .true.
+        endif
+        if (iwant.eq.6) then
+          if(ll.gt.10) go to 900
+          temp3=bfill(1:11-ll)//temp(1:ll)
+          read(temp3,'(1x,i10)') esdlim_
+            if (iabs(esdlim_).lt.9.or.
+     *        iabs(esdlim_).gt.99999) go to 900
+        endif
+        if (iwant.eq.7) then
+          do ii = 1,ll
+          if (temp(ii:ii).eq.'_') temp(ii:ii)=' '
+          enddo
+          result=prefx_(temp(1:ll),ll)
+        endif
+        if (iwant.eq.8) then
+          if(temp(1:ll).eq.'F.' .or. temp(1:ll).eq.'f' .or.
+     *      temp(1:ll).eq.'0' .or. temp(1:ll).eq.'N' .or.
+     *      temp(1:ll).eq.'n') then
+            tabl_=.false.
+          else
+            if(temp(1:ll).eq.'T.' .or. temp(1:ll).eq.'t' .or.
+     *      temp(1:ll).eq.'1' .or. temp(1:ll).eq.'Y' .or.
+     *      temp(1:ll).eq.'y') then
+              tabl_=.true.
+            else
+              go to 900
+            endif
+          endif
+        endif
+        if (iwant.eq.9) then
+          if(temp(1:ll).eq.'F.' .or. temp(1:ll).eq.'f' .or.
+     *      temp(1:ll).eq.'0' .or. temp(1:ll).eq.'N' .or.
+     *      temp(1:ll).eq.'n') then
+            cats='catno'
+          else
+            if(temp(1:ll).eq.'T.' .or. temp(1:ll).eq.'t' .or.
+     *      temp(1:ll).eq.'1' .or. temp(1:ll).eq.'Y' .or.
+     *      temp(1:ll).eq.'y') then
+              cats='catck'
+            else
+              go to 900
+            endif
+          endif
+        endif
+        if (iwant.eq.10) reqlst = temp(1:ll)
+        if (iwant.eq.11) then
+          if(temp(1:ll).eq.'F.' .or. temp(1:ll).eq.'f' .or.
+     *      temp(1:ll).eq.'0' .or. temp(1:ll).eq.'N' .or.
+     *      temp(1:ll).eq.'n') then
+            unfold_ = .false.
+          else
+            if(temp(1:ll).eq.'T.' .or. temp(1:ll).eq.'t' .or.
+     *      temp(1:ll).eq.'1' .or. temp(1:ll).eq.'Y' .or.
+     *      temp(1:ll).eq.'y') then
+              unfold_ = .true.
+            else
+              go to 900
+            endif
+          endif
+        endif
+        if (iwant.eq.12) then
+          if(ll.gt.10) go to 900
+          temp3=bfill(1:11-ll)//temp(1:ll)
+          read(temp3,'(1x,i10)') pfold_
+            if (pfold_.lt.0.or.
+     *        pfold_.gt.99999) go to 900
+        endif
+        if (iwant.eq.13) then
+          if(ll.gt.10) go to 900
+          temp3=bfill(1:11-ll)//temp(1:ll)
+          read(temp3,'(1x,i10)') line_
+            if (line_.lt.80.or.
+     *        line_.gt.MAXBUF) go to 900
+        endif
+        if (iwant.eq.14) then
+          if(temp(1:ll).eq.'F' .or. temp(1:ll).eq.'f' .or.
+     *      temp(1:ll).eq.'0' .or. temp(1:ll).eq.'N' .or.
+     *      temp(1:ll).eq.'n') then
+            guesst = .false.
+          else
+            if(temp(1:ll).eq.'T.' .or. temp(1:ll).eq.'t' .or.
+     *      temp(1:ll).eq.'1' .or. temp(1:ll).eq.'Y' .or.
+     *      temp(1:ll).eq.'y') then
+              guesst = .true.
+            else
+              go to 900
+            endif
+          endif
+        endif
+        if (iwant.eq.15) then
+          if (temp(1:ll).eq.'read' .or. 
+     *      temp(1:ll).eq.'READ') then
+              rdbkt_ = .true.
+              rdprn_ = .true.
+              rdbrc_ = .true.
+          else
+            if (temp(1:ll).eq.'cif2read' .or. 
+     *      temp(1:ll).eq.'CIF2READ' .or.
+     *      temp(1:ll).eq.'CIF2read') then
+               rdbrc_ = .true.
+               rdbkt_ = .true.
+               rdcolon_ = .true.
+               rdrcqt_=.true.
+               rdtq_=.true.
+            else
+              if (temp(1:ll).eq.'noread' .or.
+     *        temp(1:ll).eq.'NOREAD') then
+                rdbkt_ = .false.
+                rdprn_ = .false.
+                rdbrc_ = .false.  
+              else
+                if (temp(1:ll).eq.'nocif2read' .or. 
+     *          temp(1:ll).eq.'NOCIF2READ' .or.
+     *          temp(1:ll).eq.'NOCIF2read') then
+                  rdbrc_ = .false.
+                  rdbkt_ = .false.
+                  rdcolon_ = .false.
+                  rdrcqt_=.false.
+                  rdtq_=.false.
+                else
+                  go to 900
+                end if
+              end if
+            end if
+          end if
+        end if
+        iwant = 0
+      else
+        if (temp(1:1).eq.'-') then
+          temp2=temp(3:256)
+          if (ll.gt.2) then
+            backarg = .true.
+            karg = karg-1
+          else
+            if (karg.lt.numarg) then
+              call getarg(karg+1,temp4)
+            else
+              temp4 = '--'
+            endif
+            if (temp4(1:1).eq.'-'
+     *        .and.temp4(2:2).ne.' ') then
+              temp2='y'
+              if (temp(2:2).eq.'i' .or. temp(2:2).eq.'o') temp2='-'
+              if (temp(2:2).eq.'d') go to 900
+              if (temp(2:2).eq.'e') temp2='19'
+              if (temp(2:2).eq.'f') go to 900
+              if (temp(2:2).eq.'m') temp2 = '80'
+              if (temp(2:2).eq.'p') go to 900
+              if (temp(2:2).eq.'q') go to 900
+              if (temp(2:2).eq.'w') temp2 = '80'
+              backarg = .true.
+              karg = karg-1
+            endif
+          endif
+          if (temp(2:2).eq.'i') then
+            iwant = 1
+            if (isi.gt.0) go to 900
+            isi = 1
+          endif
+          if (temp(2:2).eq.'o') then
+            iwant = 2
+            if (iso.gt.0) go to 900
+            iso = 1
+          endif
+          if (temp(2:2).eq.'d') then
+            iwant = 3
+            isd = 1
+          endif
+          if (temp(2:2).eq.'a') iwant = 4
+          if (temp(2:2).eq.'f') iwant = 5
+          if (temp(2:2).eq.'e') iwant = 6
+          if (temp(2:2).eq.'p') iwant = 7
+          if (temp(2:2).eq.'t') iwant = 8
+          if (temp(2:2).eq.'c') iwant = 9
+          if (temp(2:2).eq.'q') then
+            iwant = 10
+            if (isq.gt.0) go to 900
+            isq = 1
+          endif
+          if (temp(2:2).eq.'u') iwant = 11
+          if (temp(2:2).eq.'w') iwant = 12
+          if (temp(2:2).eq.'m') iwant = 13
+          if (temp(2:2).eq.'g') iwant = 14
+          if (temp(2:2).eq.'B') iwant = 15
+          if (iwant.eq.0) go to 900
+        else
+          ifound = ifound+1
+          if (ifound.eq.1) then
+            if (isi.gt.0) then
+              ifound = ifound+1
+            else
+              inpcif = temp(1:ll)
+              isi = 1
+            endif
+          endif
+          if (ifound.eq.2) then
+            if (iso.gt.0) then
+              ifound = ifound+1
+            else
+              outcif = temp(1:ll)
+              iso = 1
+            endif
+          endif
+          if (ifound.eq.3) then
+            if (isd.gt.0) then
+              ifound = ifound+1
+            else
+              ckdict = temp(1:ll)
+              isd = 1
+            endif
+          endif
+          if (ifound.eq.4) then
+            if (isq.gt.0) then
+              ifound = ifound+1
+            else
+              reqlst = temp(1:ll)
+              isq = 1
+            endif
+          endif
+          if (ifound.gt.4) go to 900
+        endif
+      endif
+      go to 100
+ 500  linpcif = max(1,nblen(inpcif))
+      loutcif = max(1,nblen(outcif))
+      lckdict = max(1,nblen(ckdict))
+      lreqlst = max(1,nblen(reqlst))
+      return
+ 900  write(iunerr,'(a)')
+     *  ' cif2cif [-i input_cif] [-o output_cif] '//
+     *           '[-d dictionary] [-c catck]',
+     *  '         [-a aliaso_] [-e esdlim_] [-f command_file] '//
+     *           '[-g guess_type] [-m maxline] [-p prefix]',
+     *  '         [-q request_list] [-t tabl_]  [-u unfold] '//
+     *           '[-w wrap] [-B read|cif2read] ',
+     *  '         [input_cif [output_cif '//
+     *           '[dictionary [request_list]]]]'
+       write(iunerr,'(a)')
+     * ' input_cif defaults to $CIF2CIF_INPUT_CIF or stdin',
+     * ' output_cif defaults to $CIF2CIF_OUTPUT_CIF or stdout',
+     * ' dictionary defaults to $CIF2CIF_CHECK_DICTIONARY',
+     * ' multiple dictionaries may be specified ',
+     * ' request_list defaults to $CIF2CIF_REQUEST_LIST',
+     * ' input_cif of "-" is stdin, output_cif of "-" is stdout',
+     * ' request_list of "-" is stdin'
+       write(iunerr,'(a)')
+     * ' -a has values of t or 1 or y vs. f or 0 or n,',
+     * ' -c has values of t or 1 or y vs. f or 0 or n,',
+     * ' -e has integer values (e.g. 9, 19(default) or 29),',
+     * ' -g has values of t, 1 or y vs. f, 0 or n (default t),',
+     * ' -m has values from 80 to 2048 for a maximum line width',
+     * ' -p has a string value in which "_" is replaced by blank,',
+     * ' -t has values of t, 1 or y vs. f, 0 or n (default f),',
+     * ' -u has values of t, 1 or y vs. f, 0 or n (default f),',
+     * ' -w has values of 0 for no wrap or a column to wrap on',
+     * ' -B has values to read brackets for DDLm 2008 or CIF2' 
+       stop
+       end
+C
+C
+       function nblen(str)
+C
+C      variant of lastnb which also detects a null character to
+C      terminate a string
+C
+       character*(*) str
+       integer nblen,ll,jj,ii
+       ll = len(str)
+       jj = index(str,char(0))
+       if (jj.ne.0) ll = jj-1
+       if (ll.eq.0) then
+         nblen = 0
+         return
+       endif
+       do ii = 1,ll
+       nblen = 1+ll-ii
+       if(str(nblen:nblen).ne.' ' .and.
+     *   str(nblen:nblen).ne. char(9) ) return
+       enddo
+       nblen = 0
+       return
+       end
+C
+C
+       subroutine c2cerr(mess)
+C
+C      variant of ciftbx err routine for cif2cif
+C
+       character*(*) mess
+       call c2cmsg('error',mess)
+       stop
+       end
+C
+C
+       subroutine c2cwarn(mess)
+C
+C      variant of ciftbx warn for cif2cif
+C
+       character*(*) mess
+       call c2cmsg('warning',mess)
+       return
+       end
+C
+C
+       subroutine c2cmsg(flag,mess)
+C
+       integer    nblen
+       include   'cif2cif.cmn'
+       include   'ciftbx.cmv'
+       character*(*) flag
+       character*(*) mess
+       character*(MAXBUF)  tline
+       integer       ll,ls,ltry,ii,i
+C
+       tline = ' cif2cif'
+       if (nblen(flag).gt.0) 
+     *   tline = ' cif2cif'//' '//flag(1:nblen(flag))
+       tline= tline(1:nblen(tline))//': '
+     *   //outcif(1:loutcif)//' '
+     *   //' line:'
+       ll = max(1,nblen(tline))
+       write(iunerr,'(a,i7)')tline(1:ll),precn_
+       ll=len(mess)
+       ls=1
+100    if(ll-ls.le.79) then
+         write(iunerr,'(1X,a)') mess(ls:ll)
+         return
+       else
+         ltry = min(ll,ls+79)
+         do ii = ls+1,ltry
+         i = ltry-ii+ls+1
+         if(mess(i:i).eq.' ') then
+           write(iunerr,'(1X,a)') mess(ls:i-1)
+           ls=i+1
+           if(ls.le.ll) go to 100
+           return
+         endif
+         enddo
+         write(iunerr,'(1X,a)') mess(ls:ltry)
+         ls=ltry+1
+         if(ls.le.ll) go to 100
+         return
+       endif  
+       end
+C
+C
+       subroutine splitstr(numf,str,sarry,maxf,fs)
+C
+C      split the string str into a maximum of maxf fields using the
+C      field separator fs.  The number of fields found is reported in
+C      numf.  The fields are split into the array sarry, with each
+C      field terminated by a null character.
+C
+C
+C      The field separator ' ' is treated as a special case, with
+C      full blank and tab removal, and only the count of non-blank
+C      fields returned.
+C
+       integer numf, maxf
+       integer jj,jjt,is,ll,lfs
+       character*(*) str, sarry(maxf), fs
+       ll = len(str)
+       lfs = len(fs)
+       if (fs.eq.' ') lfs = 1
+       is = 1
+       numf = 0
+ 100   jj = index(str(is:ll),fs)
+       if (fs.eq.' ') then
+         jjt = index(str(is:ll),char(9))
+         if (jj.ne.0) then
+           if (jjt.ne.0) jj = min(jjt,jj)
+         else
+           jj = jjt
+         endif
+       endif
+       if (jj.eq.0) then
+         numf = numf+1
+         if (numf.le.maxf) then
+           sarry(numf) = str(is:ll)//char(0)
+         endif
+         return
+       else
+         if (fs.ne.' ' .or. jj.gt.1) then
+         numf = numf+1
+           if (numf.le.maxf) then
+             if (jj.gt.1) then
+               sarry(numf) = str(is:is-1+jj-1)//char(0)
+             else
+               sarry(numf) = char(0)
+             endif
+           endif
+         endif
+         is = is+jj+lfs-1
+         if (is.le.ll) go to 100
+         if (fs.ne.' ') then 
+           numf = numf+1
+           if (numf.le.maxf) sarry(numf) = char(0)
+         endif
+         return
+       endif
+       end
+
+
+      END MODULE
+      
+      MODULE CIFtbx
+      
+      CONTAINS
+C
+C
+C    \ | /            /##|    @@@@  @   @@@@@   |      |             @    @
+C     \|/ STAR       /###|   @      @   @     __|__    |             @    @
+C  ----*----        /####|  @       @   @@@@    |      |___  __  __  @@@@@@
+C     /|\          /#####|   @      @   @       |      |   \   \/         @
+C    / | \         |#####|    @@@@  @   @       \___/  \___/ __/\__       @
+C                  |#####|________________________________________________
+C                 ||#####|                 ___________________            |
+C        __/|_____||#####|________________|&&&&&&&&&&&&&&&&&&&||          |
+C<\\\\\\\\_ |_____________________________|&&& 29 Nov 2009  &&||          |
+C          \|     ||#####|________________|&&&&&&&&&&&&&&&&&&&||__________|
+C                  |#####|
+C                  |#####|                Version 4.1.0 Release
+C                  |#####|
+C                 /#######\
+C                |#########|
+C                    ====
+C                     ||
+C           An extended tool box of fortran routines for manipulating CIF data.
+C                     ||
+C                     ||  CIFtbx Version 4
+C                     ||        by
+C                     ||
+C                     ||  Sydney R. Hall (syd@crystal.uwa.edu.au)
+C                     ||  Crystallography Centre
+C                     ||  University of Western Australia
+C                     ||  Nedlands 6009, AUSTRALIA
+C                     ||
+C                     ||       and
+C                     ||
+C                     ||  Herbert J. Bernstein (yaya@bernstein-plus-sons.com)
+C                     ||  Bernstein + Sons
+C                     ||  5 Brewster Lane
+C                     ||  Bellport, NY 11713, U.S.A.
+C                     ||
+C The latest program source and information is available from:
+C                     ||
+C Em: syd@crystal.uwa.edu.au       ,-_|\      Sydney R. Hall
+C sendcif@crystal.uwa.edu.au      /     \     Crystallography Centre
+C Fx: +61 9 380 1118  ||      --> *_,-._/     University of Western Australia
+C Ph: +61 9 380 2725  ||               v      Nedlands 6009, AUSTRALIA
+C                     ||
+C                     ||
+C_____________________||_____________________________________________________
+C
+C This is a version of CIFtbx which has been extended to work with CIF2, DDLm,
+C DDL 2 and mmCIF as well as with DDL 1.4 and core CIF dictionaries.  CIFtbx
+C version 1 was written by Sydney R. Hall (see Hall, S. R., "CIF Applications
+C IV.  CIFtbx: a Tool Box for Manipulating CIFs,"  J. Appl. Cryst (1993). 26,
+C 482-494.  The revisions for version 2 were done by Herbert J. Bernstein
+C and Sydney R. Hall (see Hall, S. R. and Bernstein, H. J., "CIFtbx 2:
+C Extended Tool Box for Manipulating CIFs," J. Appl. Cryst.(1996). 29,
+C 598-603)
+C
+C The revisions for releases 3 and 4 were done by Herbert J. Bernstein, work
+C funded in part by the International Union of Crystallography
+C
+C___________________________________________________________________________
+C
+C
+C    GENERAL TOOLS
+C
+C
+C    init_      Sets the device numbers of files.   (optional)
+C               [logical function always returned .true.]
+C
+C               <input CIF dev number> Set input CIF device     (def=1)
+C
+C               <output CIF dev number>Set output CIF device    (def=2)
+C
+C               <diracc dev number>    Set direct access formatted
+C                                      scratch device number    (def=3)
+C
+C               <error  dev number>    Set error message device (def=6)
+C
+C
+C
+C    dict_      Requests a CIF dictionary be used for various data checks.
+C               [logical function returned as .true. if the name dictionary
+C               was opened and if the check codes are recognisable.  The
+C               data item names used in the first dictionary loaded are
+C               considered to be preferred by the user to aliases found
+C               in dictionaries loaded in later calls.  On exit from dict_
+C               the variable dicname_ is either equal to the filename, or,
+C               if the dictionary had a value for the tag dictionary_name
+C               of dictionary.title, dicname_ is set to that value.
+C               The variable dicver_ is blank or set to the value of
+C               _dictionary_version or of _dictionary.version  The check codes
+C               'catck' and 'catno' turn on and off checking of dictionary
+C               catgeory conventions.  The default is 'catck'.  The check
+C               codes 'parck' and 'parno' turn on and off checking of
+C               parent-child relationships.  The default of 'parck'.  Three check
+C               codes control the handling of tags from the current dictionary
+C               which duplicate tags from a dictionary loaded earlier.  These
+C               codes ('first', 'final' and 'nodup') have effect only for the
+C               current call to dict_  The default is 'first'.]
+C
+C               <dictionary filename>  A CIF dictionary in DDL format
+C                                      or blank if just setting flags
+C                                      or resetting the dictionary
+C
+C               <check code string>    The codes specifying the types of
+C                                      checks to be applied to the CIF.
+C
+C                                      'valid'  data name validation check.
+C                                      'dtype'  data item data type check.
+C                                      'catck'  check datanames against
+C                                               categories
+C                                      'catno'  don't check datanames against
+C                                               categories
+C                                      'parck'  check datanames against
+C                                               parent-child relationships
+C                                      'parno'  don't check datanames against
+C                                               parent-child relationships
+C                                      'first'  accept first dictionary's
+C                                               definitions of duplicate tags
+C                                      'final'  accept final dictionary's
+C                                               definitions of duplicate tags
+C                                      'nodup'  do not accept duplicate tag
+C                                               definitions
+C                                      'parck'  check datanames against parent-
+C                                               child relationahips
+C                                      'parno'  don't check datanames against
+C                                               parent-child relationships
+C                                      'reset'  switch off checking flags
+C                                      'close'  close existing dictionaries
+C
+C___________________________________________________________________________
+C
+C
+C   CIF ACCESS TOOLS  ("the get_ing commands")
+C
+C
+C
+C    ocif_      Opens the CIF containing the required data.
+C               [logical function returned .true. if CIF opened]
+C
+C               <CIF filename>        A blank name signals that the
+C                                     currently open input CIF file
+C                                     will be read.
+C
+C
+C
+C    data_      Identifies the data block containing the data to be requested.
+C               [logical function returned .true. if block found]
+C
+C               <data block name>     A blank name signals that the next
+C                                     encountered block is used (the block
+C                                     name is stored in the variable bloc_).
+C
+C
+C    bkmrk_     Saves or restores the current position so that data from
+C               elsewhere in the cif can be examined.
+C               [logical function returned as .true. on save if there was
+C               room in internal storage to hold the current position, .true.
+C               on restore if the bookmark number used was valid.  If the
+C               argument is zero, the call is to save the position and return
+C               the bookmark number in the argument.  If the argument is
+C               non-zero, the call is to restore the position saved for the
+C               bookmark number given.  The bookmark and the argument are
+C               cleared.  The position set on return allow reprocessing of
+C               the data item or loop row last processed when the bookmark
+C               was placed.
+C
+C               NOTE:  All bookmarks are cleared by a call to data_]
+C
+C               <integer variable>    Bookmark number
+C
+C
+C    find_      Find the location of the requested item in the CIF.
+C               [The argument "name" may be a data item name, blank
+C               for the next such item.  The argument "type" may be
+C               blank for unrestricted acceptance of any non-comment
+C               string (use cmnt_ to see comments), including loop headers,
+C               "name" to accept only the name itself and "valu"
+C               to accept only the value, or "head" to position to the
+C               head of the CIF.  Except when the "head" is requested,
+C               the position is left after the data item provided.  If the
+C               item found is of type "name", posnam_ is set, otherwise,
+C               posval_]
+C
+C               <data item name>      A blank name signals that the next
+C                                     item of the type specified is needed
+C
+C               <data item type>      blank, 'head', 'name' or 'valu'
+C
+C               <character variable>  Returned string is of length long_.
+C
+C
+C
+C    test_      Identify the data attributes of the named data item.
+C               [logical function returned as .true. if the item is present or
+C               .false. if it is not. The data attributes are stored in the
+C               common variables list_, type_, dictype_, diccat_ and dicname_.
+C               The list, array, tuple or table attribites are stored in
+C               ttype_, depth_ index_.
+C
+C               The values in dictype_, diccat_ and dicname_ are valid
+C               whether or not the data item is found in the input CIF, as
+C               long as the named data item is found in the dictionaries
+C               declared by calls to dict_.  The data item name found
+C               in the input CIF is stored in tagname_.  The appropriate
+C               column numbers are stored in posnam_, posval_, posend_ and (for
+C               numbers) in posdec_.  The quotation mark, if any, used is
+C               stored in quote_.
+C
+C               list_ is an integer variable containing the sequential number
+C               of the loop block in the data block. If the item is not within
+C               a loop structure this value will be zero.
+C
+C               type_ is a character*4 variable with the possible values:
+C                      'numb'  for number data
+C                      'char'  for character data
+C                      'text'  for text data
+C                      'null'  if data missing or '?' or '.'
+C                              also used for blank quoted fields if
+C                              nblank_ is true
+C
+C               ttype_ is a character*4 variable with the container type:
+C                      'list'  for list or array data   [item,...]
+C                      'tupl'  for tuple data           (item,...)
+C                      'tabl'  for table data           {item,...}
+C               The meanings change if rdbkt_, rdbrc_ or rdprn_ are
+C               false.  If rdbkt_ is false, the meanings are
+C                      'tupl'  for tuple data           (item,...)
+C                      'list'  for list or table data   {item,...}
+C               If rdprn_ is false, then 'list' is used for all
+C               container types.  If depth_ is 0, then ttype_ is not
+C               valid and will contain '    '
+C
+C               depth_ is an integer variable with the depth into a
+C               list, array, tuple or table.  A depth of zero means that
+C               no list, array, tuple or table is being processed.
+C
+C               index_ is an integer variable with the index (from 1)
+C               across a list, array, tuple or table.  An index of zero
+C               means that no list, array, tuple or table is being processed.
+C
+C               dictype_ is a character*(NUMCHAR) variable with the type code
+C               given in the dictionary entry for the named data item.  If
+C               no dictionary was used, or no type code was specified, this
+C               field will simply agree with type_.  If a dictionary was used,
+C               this type may be more specific than the one given by type_.
+C
+C               diccat_ is a character*(NUMCHAR) variable with the category
+C               of the named data item, or '(none)'
+C
+C               dicname_ is a character*(NUMCHAR) variable with the name of
+C               the data item which is found in the dictionary for the
+C               named data item.  If alias_ is .true., this name may
+C               differ from the name given in the call to test_.  If alias_
+C               is .false. or no preferred alias is found, dicname_ agrees with
+C               the data item name.
+C
+C               tagname_ is a character*(NUMCHAR) variable with the name
+C               of the data item as found in the input CIF.  It will be
+C               blank if the data item name requested is not found in the
+C               input CIF and may differ from the data item name provided
+C               by the user if the name used in the input CIF is an
+C               alias of the data item name and alias_ is .true.
+C
+C               posnam_, posval_, posend_  and posdec_ are integer variables
+C               which may be examined if information about the horizontal
+C               position of the name and data read are needed.  posnam_ is the
+C               starting column of the data name found (most often 1).
+C               posval_ is the starting column of the data value.  If the
+C               field is numeric, then posdec_ will contain the effective
+C               column number of the decimal point.  For whole numbers, the
+C               effective position of the decimal point is one column to the
+C               right of the field.  posend_ contains the ending column of the
+C               data value.
+C
+C               quote_ is a character*3 variable which may be examined to
+C               determine if a quotation character was used on character data.]
+C
+C               <data name>           Name of the data item to be tested.
+C
+C
+C    dtype_     Return the dictionary type of a data name, if any.
+C               [logical function returned as .true. if the item has a type
+C               in the dctionary, .false. if not.  The type returned is
+C               one of the base type used by type_ (see above), if possible]
+C
+C               <data name>          Name of the item for which a type is needed
+C               <data type>          Returned type from the dictionary
+C
+C
+C    name_      Get the NEXT data name in the current data block.
+C               [logical function returned as .true. if a new data name exists
+C               in the current data block, and .false. when the end of the data
+C               block is reached.]
+C
+C               <data name>           Returned name of next data item in block.
+C
+C
+C
+C    numb_      Extracts the number and its standard deviation (if appended).
+C               [logical function returned as .true. if number present. If
+C               .false. arguments 2 and 3 are unaltered. If the esd is not
+C               attached to the number argument 3 is unaltered.]
+C
+C               <data name>           Name of the number sought.
+C
+C               <real variable>       Returned number.
+C
+C               <real variable>       Returned standard deviation.
+C
+C
+C
+C    numd_      Extracts the number and its standard deviation (if appended)
+C               as double precision variables.
+C               [logical function returned as .true. if number present. If
+C               .false. arguments 2 and 3 are unaltered. If the esd is not
+C               attached to the number argument 3 is unaltered.]
+C
+C               <data name>           Name of the number sought.
+C
+C               <double precision variable>
+C                                     Returned number.
+C
+C               <double precision variable>
+C                                     Returned standard deviation.
+C
+C
+C
+C    char_      Extracts character and text strings.
+C               [logical function returned as .true. if the string is present.
+C               Note that if the character string is text this function is
+C               called repeatedly until the logical variable text_ is .false.
+C               Non-text blank (quoted blanks) or empty ('' or "") fields
+C               are converted by char to a null field, if nblank_ is true.]
+C
+C               <data name>           Name of the string sought.
+C
+C               <character variable>  Returned string is of length long_.
+C
+C    charnp_    Extracts character and text strings.
+C               [logical function returned as .true. if the string is present.
+C               Note that if the character string is text this function is
+C               called repeatedly until the logical variable text_ is .false.
+C               If the value is found in a container, then charnp_ should
+C               be called repeatedly until both text_ is false and depth_
+C               is zero. 
+C
+C               Non-text blank (quoted blanks) or empty ('' or "") fields
+C               are converted by char to a null field, if nblank_ is true.
+C               Only the number of characters returned in the third argument
+C               are set.  This value is never less than 1, but may be less
+C               than the allocated length of the returned string.]
+C
+C               <data name>           Name of the string sought.
+C
+C               <character variable>  Returned string is of length long_.
+C
+C               <integer variable>    Returned length of valid characters.
+C
+C
+C    cmnt_      Extracts the next comment from the data block.
+C               [logical function returned as .true. if a comment is present.
+C               The initial comment character "#" is _not_ included in the
+C               returned string.  A completely blank line is treated as
+C               a comment.  A comment may be extracted while reading a list,
+C               array, tuple or table]
+C
+C               <character variable>  Returned string is of length long_.
+C
+C
+C    delim_     Reports the most recently seen delimiter prior to the
+C               most recently extracted tag or value at the specified
+C               depth.  Outside of bracketed constructs, only delimiters
+C               at depth 0 (top level) can be seen.  This is not the
+C               quoting character for a quoted string or text field.
+C               See the variable quote_.
+C               [logical function returned as .true. if the depth is
+C               not negative and greater than or equal to the current
+C               depth.  At depth 0, in a correctly formatted CIF, the
+C               delimiter returned is always a blank,]
+C
+C               <integer variable>    Depth
+C                    
+C               <character variable>  Returned string is of length 1
+C
+C               <integer variable>    column position of delimiter
+C
+C               <integer variable>    record position of delimiter
+C
+C
+C
+C    purge_     Closes existing data files and clears tables and pointers.
+C               [subroutine call]
+C
+C____________________________________________________________________________
+C
+C
+C
+C   CIF CREATION TOOLS ("the put_ing commands")
+C
+C
+C
+C    pfile_     Create a file with the specified file name.
+C               [logical function returned as .true. if the file is opened.
+C               The value will be .false. if the file already exists.]
+C
+C               <file name>           Blank for use of currently open file
+C
+C
+C
+C    pdata_     Put a data block command into the created CIF.
+C               [logical function returned as .true. if the block is created.
+C               The value will be .false. if the block name already exists.
+C               Produces a save frame instead of a data block if the
+C               variable saveo_ is true during the call.  No block duplicate
+C               check is made for a save frame.]
+C
+C               <block name>
+C
+C    pdelim_    Emit a specific delimiter
+C               [logical function returned as .true. if the delimiter is
+C               appropriate to the context.  Emitting a '(', '{' or '['
+C               increases the output depth by one.  Emitting a ')', '}'
+C               or ']' decreases the output depth by one.  Emitting a ' ',
+C               ',' or ':' does not change the depth.  Emitting a ','
+C               or ':' at depth_ 0 is an error that can be overridden
+C               by the second argument being .true..  Emitting a ' ' at
+C               a depth_ greater than 0 is an error that can be overridden
+C               by the second argument being .true.. ]
+C
+C               <character variable>   The one-character delimiter string
+C
+C               <logical variable>     .true. if an invalid delimiter is
+C                                      to be forced out
+C
+C               <integer variable>     Column position at which to write
+C                                      the delimiter or 0 if not specified
+C
+C
+C
+C    ploop_     Put a loop_ data name into the created CIF.
+C               [logical function returned as .true. if the invocation
+C               conforms with the CIF logical structure.  If pposval_
+C               is non-zero, the "loop_" header is positioned to
+C               that column.  If pposnam_ is non-zero, the data name is
+C               positioned to that column.]
+C
+C               <data name>         If the name is blank on the first call
+C                                   of a loop, only the "loop_" is placed.
+C
+C
+C
+C    pchar_     Put a character string into the created CIF.
+C               [logical function returned as .true. if the name is unique,
+C               AND, if dict_ is invoked, is a name defined in the dictionary,
+C               AND, if the invocation conforms to the CIF logical structure.
+C               The action of pchar_ is modified by the variables pquote_ and
+C               nblanko_.  If pquote_ is non-blank, it is used as a quotation
+C               character for the string written by pchar_.  The valid values
+C               are '''', '"', ';', '(', '{', '[', '''''''', and '"""'.
+C               In the last six cases a text field, bracketed construct or
+C               multi-line triple-quoted string is written.  If the string
+C               contains a matching character to the value of quote_, or if
+C               quote_ is not one of the valid quotation characters, a valid,
+C               non-conflicting quotation character is used or the line-folding
+C               conventions are used to prevent the close-quote from being
+C               followed by white space.  Except when writing a text field, if
+C               nblanko_ is true, pchar_ converts a blank string to
+C               an unquoted period.]
+C
+C               <data name>         If the name is blank, do not output name.
+C
+C               <character string>  A character string of MAXBUF chars or less.
+C
+C
+C
+C    pcmnt_     Puts a comment into the created CIF.
+C               [logical function returned as .true.  The comment character
+C               "#" should not be included in the string.  A blank comment
+C               is presented as a blank line without the leading "#"].
+C
+C               <character string>  A character string of MAXBUF chars or less.
+C
+C
+C    pnumb_     Put a single precision number and its esd into the created CIF.
+C               [logical function returned as .true. if the name is unique,
+C               AND, if dict_ is invoked, is a name defined in the dictionary,
+C               AND, if the invocation conforms to the CIF logical structure.
+C               The number of esd digits is controlled by the variable
+C               esdlim_]
+C
+C               <data name>         If the name is blank, do not output name.
+C
+C               <real variable>     Number to be inserted.
+C
+C               <real variable>     Esd number to be appended in parentheses.
+C
+C
+C    pnumd_     Put a double precision number and its esd into the created CIF.
+C               [logical function returned as .true. if the name is unique,
+C               AND, if dict_ is invoked, is a name defined in the dictionary,
+C               AND, if the invocation conforms to the CIF logical structure.
+C               The number of esd digits is controlled by the variable
+C               esdlim_]
+C
+C               <data name>         If the name is blank, do not output name.
+C
+C               <double precision variable>
+C                                   Number to be inserted.
+C
+C               <double precision variable>
+C                                   Esd number to be appended in parentheses.
+C
+C
+C
+C    ptext_     Put a character string into the created CIF.
+C               [logical function returned as .true. if the name is unique,
+C               AND, if dict_ is invoked, is a name defined in the dictionary,
+C               AND, if the invocation conforms to the CIF logical structure.
+C               ptext_ is invoked repeatedly until the text is finished. Only
+C               the first invocation will insert a data name.
+C
+C               If used when pclipt_ is .true. if the first character of the
+C               text field is blank, it is removed.
+C
+C               If used when pfold_ is non-zero, the text field will be marked
+C               as folded even if the first line is small enough to fit.
+C               In order to produce a non-folded text field in the midst
+C               of generally folded items, pfold_ should be set to 0 before
+C               calling ptext_ and then restored to the previous value.]
+C
+C               <data name>         If the name is blank, do not output name.
+C
+C               <character string>  A character string of MAXBUF chars or less.
+C
+C
+C    prefx_     Puts a prefix onto subsequent lines of the created CIF.
+C               [logical function returned as .true.  The second argument
+C               may be zero to suppress a previously used prefix, or
+C               greater than the non-blank length of the string to force
+C               a left margin.  Any change in the length of the prefix
+C               string flushes pending partial output lines, but does _not_
+C               force completion of pending text blocks or loops.
+C               This function allows the CIF output functions to be used
+C               within what appear to be text fields to support annotation
+C               of a CIF. ]
+C
+C               <character string>  A character string of MAXBUF chars or less.
+C
+C               <integer variable>  The length of the prefix string to use.
+C
+C
+C
+C
+C    close_     Close the creation CIF. MUST be used if pfile_ is used.
+C               [subroutine call]
+C
+C
+C____________________________________________________________________________
+C
+C
+C
+C....The CIF tool box also provides variables for data access control:
+C
+C
+C    alias_      Logical variable: if left .true. then all calls to
+C                CIFtbx functions may use aliases of data item names.
+C                The preferred synonym from the dictionary will be
+C                subsituted internally, provided aliased data names were
+C                supplied by an input dictionary (via dict_).  The
+C                default is .true., but alias_ may be set to .false.
+C                in an application.
+C
+C    aliaso_     Logical variable: if set .true. then cif output
+C                routines will convert aliases to the names to preferred
+C                synonyms from the dictionary.  The default is .false., but
+C                aliaso_ may be set to .true. in an application.  The
+C                setting of aliaso_ is independent of the setting of
+C                alias_.
+C
+C    align_      Logical variable signals alignment of loop_ lists during
+C                the creation of a CIF. The default is .true.
+C
+C    append_     Logical variable:  if set .true. each call to ocif_ will
+C                append the information found to the current cif.  The default
+C                is .false.
+C
+C    bloc_       Character*(NUMCHAR) variable: the current block name.
+C
+C    clipt_      Logical variable: if set .true., when reading text fields,
+C                an extra blank is inserted before the character string
+C                returned for the first line of a text field, emulating
+C                the behavior of CIFtbx versions prior to version 4.
+C
+C    decp_       Logical variable: set when processing numeric input, .true.
+C                if there is a decimal point in the numeric value, .false.
+C                otherwise
+C
+C    depth_      Integer variable: set to the depth within a list, array, tuple
+C                or table
+C
+C    dictype_    Character*(NUMCHAR) variable: the precise data type code
+C                (see test_)
+C
+C    diccat_     Character*(NUMCHAR) variable: the category (see test_)
+C
+C    dicname_    Character*(NUMCHAR) variable: the root alias (see test_) or
+C                the name of the dictionary just loaded (see dict_)
+C
+C    dicpname_   Character*(NUMCHAR) variable: the parent (see test_)
+C
+C    dicver_     Character*(NUMCHAR) variable: the version of the dictionary
+C                just loaded (see dict_)
+C
+C    esdlim_     Integer variable:  Specifies the upper limit of esd's
+C                produced by pnumb_, and, implicitly, the lower limit.
+C                The default value is 19, which limits esd's to the range
+C                2-19.  Typical values of esdlim_ might be 9 (limiting
+C                esd's to the range 1-9), 19, or 29 (limiting esd's
+C                to the range 3-29).  If esdlim_ is given as a negative
+C                value, the upper limit of esd's is the absolute value
+C                of esdlim_ and the lower limit is 1.
+C
+C    esddig_     Integer variable:  The number of esd digits in the last
+C                number read from a CIF.  Will be zero if no esd
+C                was given.
+C
+C    file_       Character*(MAXBUF) variable: the filename of the current file.
+C                Warning:  only file_(1:longf_) is valid
+C
+C    fold_       Logical variable signals that the current text block
+C                began with the ';\' fold indicator. Only meaningful
+C                when text_ is .true. and type_ is 'text'.
+C                (fold_ is .true. if the indicator is present)
+C
+C    glob_       Logical variable signals that the current data block
+C                is actually a global block (.true. for a global block).
+C
+C    globo_      Logical variable signals that the output data block from
+C                pdata_ is actually a global block (.true. for a global block).
+C
+C    index_      Integer variable: Specifies the one-based index of the current
+C                item in a list, array, tuple or table
+C
+C    line_       Integer variable: Specifies the input/output line limit
+C                for processing a CIF. The default value is 80 characters.
+C                This may be set by the program. The max value is MAXBUF
+C                which has a default value of 2048.  In order to use
+C                the CIF 1.1 line folding protocol for lines that
+C                cannot be fit into line_ characters, the variable
+C                pfold_ must be set to a non-zero value less than
+C                or equal to line_
+C
+C    list_       Integer variable: the loop block number (see test_).
+C
+C    long_       Integer variable: the length of the data string in strg_.
+C
+C    longf_      Integer variable: the length of the filename in file_.
+C
+C    loop_       Logical variable signals if another loop packet is present.
+C
+C    lzero_      Logical variable: set when processing numeric input, .true.
+C                if the numeric value is of the form [sign]0.nnnn rather than
+C                [sign].nnnn, .false. otherwise
+C
+C    nblank_     Logical variable: if set .true. then all calls to
+C                to char_ or test_ which encounter a non-text quoted blank
+C                will return the type as 'null' rather than 'char'.
+C
+C    nblanko_    Logical variable: if set .true. then cif output
+C                routines will convert quoted blank strings to an
+C                unquoted period (i.e. to a data item of type null).
+C
+C    pclipt_     Logical variable: if set .true., when writing text fields,
+C                if there is a blank as the first character to be written,
+C                it is removed, emulating the behavior of CIFtbx versions
+C                prior to version 4.
+C
+C    pdecp_      Logical variable: if set .true. then cif numeric output
+C                routines will insert a decimal point in all numbers written by
+C                pnumb_ or pnumbd_.  If set .false. then a decimal point will be
+C                written only when needed.  The default is .false.
+C
+C    pesddig_    Integer variable: if set non-zero, and esdlim_ is negative,
+C                controls the number of digits for esd's produced by
+C                pnumb_ and pnumd_
+C
+C    pfold_      Integer variable:  If set non-zero, specifies a column
+C                on which output lines are to be folded.  The default is 0.
+C                If pfold_ is set to a value greater than line_ the
+C                value of line_ will be used instead.  Non-zero values of
+C                pfold_ less than 4 are not valid and will be reset to 4.
+C                Non-zero values of pfold_ less than 80 can cause conflict
+C                with the syntactic requirements of creating a valid CIF.
+C
+C    plzero_     Logical variable: if set .true. then cif numeric output
+C                routines will insert a zero before a leading decimal point,
+C                The default is .false.
+C
+C    pposdec_    Integer variable giving the position of the decimal point
+C                for the next number to be written.  This acts very much like
+C                a decimal centered tab in a word processor, to help align
+C                columns of number on a decimal point, if a decimal point
+C                is present.
+C
+C    pposend_    Integer variable giving the ending column of the next
+C                number or quoted character value to be written.  Used to
+C                pad with zeros or blanks.
+C
+C    pposnam_    Integer variable giving the starting column of the next
+C                name or comment or data block to be written.
+C
+C    pposval_    Integer variable giving the starting column of the next
+C                data value to be written by pchar_, pnumb_ or pnumd_.
+C                Also used to set the position of the initial "loop_"
+C                in a ploop_ call or to set the position of a terminal "save_"
+C                for a save frame in a pdata_ call for which saveo_ is .true.
+C
+C    posdec_     Integer variable giving the position of the decimal point
+C                for the last number read, if a decimal point was present.
+C
+C    posend_     Integer variable giving the ending column of the last
+C                data value read, not including a terminal quote.
+C
+C    posnam_     Integer variable giving the starting column of the last
+C                name or comment or data block read.
+C
+C    posval_     Integer variable giving the starting column of the last
+C                data value read.  Also reports the column of the
+C                terminal "save_" of a save frame.
+C
+C    pquote_     Character variable giving the quotation symbol to be
+C                used for the next string written, or the comment
+C                flag for the next comment written.
+C
+C    precn_      Integer variable:  Reports the record number of the last
+C                line written to the output cif.  Set to zero by init_.  Also
+C                set to zero by pfile_ and close_ if the output cif file name
+C                was not blank.
+C
+C    ptabx_      Logical variable signals tab character expansion to blanks
+C                during the creation of a CIF. The default is .true.
+C
+C    quote_      Character variable giving the quotation symbol found
+C                delimiting the last string read or the comment flag
+C                for the last comment read.  The possible valid values
+C                are '''', '"', ';', '''''''', and '"""'.
+C                The treble quotes are recognized only if rdtq_ is .true.
+C
+C    rdbrc_      Logical variable:  control recognition of { ... } constructs
+C                on read.  The default is .false.
+C
+C    rdbkt_      Logical variable:  controls recognition of [ ... ] constructs
+C                on read.  The default is .false.
+C
+C    rdprn_      Logical variable:  controls recognition of ( ... ) constructs
+C                on read.  The default is .false.
+C
+C    rdtq_       Logical variable:  controls recognition of """ ... """ and
+C                ''' ... ''' constructs on read.  The default is .false.
+C
+C    rdrcqt_     Logical variable:  controls recognition of trailing punctuation
+C                after a closing quote.  If .true. a closing quotation mark is
+C                recognized immediately, no matter what follows the closing
+C                quoation mark (the CIF 2 convention).  If .false., a closing
+C                quotation mark is only effective if followed by a blank, or,
+C                in bracketed constructs by a blank, a colon, a comma or 
+C                the closing bracket.
+C
+C    recbeg_     Integer variable:  Gives the record number of the first
+C                record to be used.  May be changed by the user to restrict
+C                access to a CIF.
+C
+C    recend_     Integer variable:  Gives the record number of the last
+C                record to be used.  May be changed by the user to restrict
+C                access to a CIF.
+C
+C    recn_       Integer variable:  Reports the record number of the last
+C                line read from the direct access copy of the input cif.
+C
+C    save_       Logical variable signals that the current data block
+C                is actually a save-frame (.true. for a save-frame).
+C
+C    saveo_      Logical variable signals that the output data block from
+C                pdata_ is actually a save-frame (.true. for a save-frame).
+C
+C    strg_       Character*(MAXBUF) variable: the current data item.
+C
+C    tabl_       Logical variable signals tab-stop alignment of output
+C                during the creation of a CIF. The default is .true.
+C
+C    tabx_       Logical variable signals tab character expansion to blanks
+C                during the reading of a CIF. The default is .true.
+C
+C    tbxver_     Character*32 variable: the CIFtbx version and date
+C                in the form 'CIFtbx version N.N.N, DD MMM YY '
+C
+C    text_       Logical variable signals if another text line or is present.
+C
+C    type_       Character*4 variable: the data type code (see test_).
+C
+C    ttype_      Character*4 variable: the list, array, tuple or table type code (see test_).
+C
+C    unfold_     Logical variable signals that input lines are to be
+C                unfolded before presentation of data.  The default
+C                is .false.
+C
+C    xmlout_     Logical variable:  Set by the user to change the output
+C                style to XML conventions.  Note that this is not a
+C                cml output, but a literal translation from the input CIF.
+C                The default is .false.
+C
+C    xmlong_     Logical variable:  Set by the user to change the style of
+C                xml output if xmlout_ is .true.  When .true. (the default)
+C                xml tag names are the full CIF tag names with the leading
+C                '_' removed.  When .false. an attempt is made to strip
+C                the leading category name as well.
+C
+C
+C_____________________________________________________________________________
+C
+C
+C >>>>>> Set the device numbers.
+C
+         function init_(devcif,devout,devdir,deverr)
+C
+         logical   init_
+         include   'ciftbx.sys'
+         integer   devcif,devout,devdir,deverr
+         integer   ii,kdig
+         real      ytest
+         double precision ztest
+         double precision tbxxdble
+         real      tbxxsngl
+C
+         init_=.true.
+         cifdev=devcif
+         outdev=devout
+         dirdev=devdir
+         errdev=deverr
+
+         recn_=0
+         precn_=0
+         plcat = ' '
+         plxcat = ' '
+         plhead(1) = ' '
+         plxhead(1) = ' '
+         pdblok = ' '
+         ploopn = 0
+         nstable = 0
+         nivt = 0
+C
+C        recompute decimal single precision precision
+C        This is found by computing the smallest power of
+C        10 which, when added to 1, produces a change
+C        and then backing off by 1
+C
+         decprc = .1
+         do ii = 1,8
+         ytest = tbxxsngl(1.+decprc/10.)
+         if (ytest.eq.1.) go to 100
+         decprc = decprc/10.
+         enddo
+100      continue
+         decprc=decprc*10.
+C
+C        recompute decimal double precision precision
+C
+         kdig = 1
+         dpprc = .1D0
+         do ii = 1,17
+         ztest = tbxxdble(1.D0+dpprc/10.)
+         if (ztest.eq.1.D0) go to 200
+         dpprc = dpprc/10.D0
+         kdig = kdig+1
+         enddo
+200      continue
+         dpprc=dpprc*10.D0
+         write(ndpfmt,'(5h(d30.,i2,1h))') kdig-1
+C
+C        recompute decimal single precision minimum power of ten
+C
+         decmin = .1
+         do ii = 1,39
+         ytest = decmin/10.
+         if (ytest.eq.0.) go to 300
+         decmin = decmin/10.
+         enddo
+300      continue
+C
+C        recompute decimal double precision minimum power of 10
+C        and its log base 10 (minexp)
+C
+         dpmin = .1D0
+         minexp = -1
+         do ii = 1,309
+         ztest = dpmin/10.
+         if (ztest.eq.0.D0) go to 400
+         dpmin = dpmin/10.D0
+         minexp = minexp-1
+         enddo
+400      continue
+         call clearfp
+         return
+         end FUNCTION
+C
+C
+C >>>>>> Function to defeat the optimizer
+C
+C     
+         function tbxxdble(x)
+         double precision x
+         double precision tbxxdble
+         tbxxdble = x
+         return
+         end 
+C
+C
+C >>>>>> Function to defeat the optimizer
+C
+C     
+         function tbxxsngl(x)
+         real x
+         real tbxxsngl
+         tbxxsngl = x
+         return
+         end
+C
+C
+C
+C
+C
+C >>>>>> Read a CIF dictionary and prepare for checks
+C
+         function dict_(fname,checks)
+C
+         logical   dict_
+         logical   ocif_
+         logical   data_
+         logical   charnp_
+         logical   test_
+         integer   lastnb
+         include  'ciftbx.sys'
+         logical   tbxxnewd, tbxxoldd
+         logical   nresult
+         character fname*(*),checks*(*)
+         character temp*(MAXBUF)
+         character codes(11)*5,name*(MAXBUF),bxname*(NUMCHAR)
+         character bpname*(NUMCHAR)
+         character bcname*(NUMCHAR),bname*(NUMCHAR)
+         character baname*(NUMCHAR),ganame*(NUMCHAR),btname*(NUMCHAR)
+         character batag*(NUMCHAR)
+         character mcstrg*(NUMCHAR)
+         character riname*(NUMCHAR),rfname*(NUMCHAR)
+         character xdicnam*(NUMCHAR)
+         character xdicver*(NUMCHAR)
+         character xmtoken*(NUMCHAR),xmtarg*(XMLCHAR),xmtyp*(NUMCHAR)
+         character xxxtemp*(NUMCHAR)
+         character*3 ovchk, otchk
+         integer   nrecds,recends,recbegs
+         integer   lchecks,lbpname,lbcname,lbaname,lbname
+         integer   kdict,ifind,jfind,iafind,ick
+         integer   i,j,nmatch,mycat,ksmatch,ii,jj,idstrt,kdup
+         integer   nmycat,ixmtyp,nxmc,kxmc
+         integer   lstrg,lxmtoken,lxmtarg,lxmtyp,kvrtp,kstrg,sindex
+         integer   lbloc,kivt
+
+C
+C        Control flags for matching categories, names and types
+C
+C        icloop is the loop number of the block for the
+C        current category
+C        ictype is the type of the current category
+C          0 - none found yet
+C          1 - _item.category_id             (DDL2)
+C          2 - _category                     (DDL1)
+C          3 - _category.id                  (DDL2)
+C          4 - _name.category_id             (DDLm)
+C        the last ictype entry is not a type, but a tag
+C        whose value may specify that this is a category
+C        with the category name given under intype
+C          5 - _definition.scope             (DDLm)
+C        inloop is the loop number of the block for the
+C        current name
+C        intype is the type of the current name
+C          0 - none found yet
+C          1 - _item.name                    (DDL2)
+C          2 - _name                         (DDL1)
+C          3 - _definition.id                (DDLm)
+C        ialoop is the loop number of the block for the
+C        current alias
+C        iatype is the type for the current alias
+C          0 - none found yet
+C          1 - _item_aliases.alias_name      (DDL2)
+C          2 - _aliases.definition_id        (DDL2)
+C        imloop is the loop number of the block for the
+C        current parent
+C        imtype is the type for a mandatory item
+C          0 - none found yet
+C          1 - _item.mandatory_code          (DDL2)
+C          2 - _category_mandatory.item_id   (DDLm)
+C        iptype is the type for the current parent
+C          0 - none found yet
+C          1 - _item_linked.parent_name      (DDL2)
+C          2 - _item_link_parent             (DDL1)
+C          3 - _category.parent_id           (DDLm)
+C          4 - _name.linked_item_id          (DDLm)
+C        itloop is the loop number of the block for the
+C        current type
+C        ittype is the type of the current type
+C          0 - none found yet
+C          1 - _item_type.code               (DDL2)
+C          2 - _type                         (DDL1)
+C          3 - _type.contents                (DDLm)
+C        iritype is the type of the current related item
+C          0 - none found yet
+C          1 - _item_related.related_name    (DDL2)
+C          2 - _related_item                 (DDL1)
+C          3 - _type.purpose                 (DDLm)
+C        irftype is the type of the current related item function
+C          0 - none found yet
+C          1 - _item_related.function_code   (DDL2)
+C          2 - _related_function             (DDL1)
+C          3 - _type.purpose                 (DDLm)
+C
+
+         integer icloop,ictype,inloop,intype,ialoop,iatype,
+     * imloop,imtype,iptype,itloop,ittype,
+     * iritype,irftype,icktype
+C
+         character*4 map_type(19),map_to(19),mapped
+         character*(NUMCHAR) dt(2),dv(2),ct(5),nt(3),at(2),tt(3)
+         character*(NUMCHAR) ri(3),rf(3),ck(4),pt(4),pc(2),mc(3)
+         character*(NUMCHAR) ve(3),vr(4)
+         data map_type
+     *   /'floa','int ','yyyy','symo','ucha','ucod','name','idna',
+     *    'any ','code','line','ulin','atco','fax ','phon','emai',
+     *    'real','inte','coun'/
+         data map_to
+     *   /'numb','numb','char','char','char','char','char','char',
+     *    'char','char','char','char','char','char','char','char',
+     *    'numb','numb','numb'/
+         data ri
+     *      /'_item_related.related_name      ',
+     *       '_related_item                   ',
+     *       '_type.purpose                   '/
+         data rf
+     *      /'_item_related.function_code     ',
+     *       '_related_function               ',
+     *       '_type.purpose                   '/
+         data dt
+     *      /'_dictionary.title               ',
+     *       '_dictionary_name                '/
+         data dv
+     *      /'_dictionary.version             ',
+     *       '_dictionary_version             '/
+         data ct
+     *      /'_item.category_id               ',
+     *       '_category                       ',
+     *       '_category.id                    ',
+     *       '_name.category_id               ',
+     *       '_definition.scope               '/
+         data nt
+     *      /'_item.name                      ',
+     *       '_name                           ',
+     *       '_definition.id                  '/
+         data at
+     *      /'_item_aliases.alias_name        ',
+     *       '_aliases.definition_id          '/
+         data tt
+     *      /'_item_type.code                 ',
+     *       '_type                           ',
+     *       '_type.contents                  '/
+         data ck
+     *      /'_category_key.name              ',
+     *       '_list_reference                 ',
+     *       '_category_key.generic           ',
+     *       '_category_key.primitive         '/
+         data pt
+     *      /'_item_linked.parent_name        ',
+     *       '_item_link_parent               ',
+     *       '_category.parent_id             ',
+     *       '_name.linked_item_id            '/
+         data pc
+     *      /'_item_linked.child_name         ',
+     *       '_item_link_child                '/
+         data mc
+     *      /'_item.mandatory_code            ',
+     *       '_mandatory                      ',
+     *       '_category_mandatory.item_id     '/
+         data ve
+     *      /'_item_enumeration.value         ',
+     *       '_enumeration                    ',
+     *       '_enumeration_set.state          '/
+         data vr
+     *      /'_item_range.minimum             ',
+     *       '_enumeration_range              ',
+     *       '_item_range.maximum             ',
+     *       '_enumeration.range              '/
+
+C
+         data codes /'valid','dtype','reset','close',
+     *       'catck','catno','nodup','final','first',
+     *       'parck','parno'/
+C
+         nrecds=nrecd
+         recbegs=recbeg_
+         recends=recend_
+         if(append_) then
+           recbeg_=nrecd
+         endif
+C
+C        Initialize kdup to 0 ('final')
+C
+         kdup = 0
+C
+C        initialize both xdicnam and xdicver to blank
+C
+         xdicnam = ' '
+         xdicver = ' '
+C
+C        preserve entry values of tcheck and vcheck in case dict fails
+C
+         otchk = tcheck
+         ovchk = vcheck
+C
+C....... Are the codes OK
+C
+         lchecks=min(len(temp),len(checks))
+         call tbxxnlc(temp(1:lchecks),checks)
+         i=0
+120      i=i+1
+         if(i.ge.lchecks)            goto 190
+         if(temp(i:i).eq.' ')        goto 120
+         do 150 j=1,11
+         if(temp(i:i+4).eq.codes(j)) goto 170
+150      continue
+         dict_=.false.
+         goto 500
+170      i=i+4
+         if(j.eq.1) then
+           vcheck='yes'
+           goto 120
+         endif
+         if(j.eq.2) then
+           tcheck='yes'
+           goto 120
+         endif
+         if(j.eq.3) then
+           vcheck = 'no '
+           tcheck = 'no '
+           goto 120
+         endif
+         if(j.eq.4) then
+           vcheck = 'no '
+           tcheck = 'no '
+           catchk = 'yes'
+           ndcname = 0
+           ndict = 0
+           if(nname.gt.0) then
+           do 180 i = 1,nname
+             dtype(i)=' '
+             dxtyp(i)=' '
+             cindex(i)=0
+             ddict(i)=0
+180        continue
+           endif
+           dict_=.true.
+           goto 500
+         endif
+         if (j.eq.5) then
+           catchk = 'yes'
+           goto 120
+         endif
+         if (j.eq.6) then
+           catchk = 'no '
+           goto 120
+         endif
+         if (j.eq.10) then
+           parchk = 'yes'
+           goto 120
+         endif
+         if (j.eq.11) then
+           parchk = 'no '
+           goto 120
+         endif
+         kdup=j-8
+         goto 120
+C
+C        if no category names have been loaded, clean up
+C        the hash table for dictionary category names
+C
+190      if(ndcname.eq.0) then
+           call hash_init(dcname,dcchain,NUMDICT,ndcname,dchash,
+     *     NUMHASH)
+         endif
+C
+C        if no dictionary names have been loaded, clean up
+C        the hash table for dictionary names
+C
+         if(ndict.eq.0) then
+           call hash_init(dicnam,dicchain,NUMDICT,ndict,dichash,
+     *     NUMHASH)
+         endif
+         idstrt=ndict
+C
+C....... Open and store the dictionary
+C
+         dict_=.true.
+         if(fname.eq.' ')            goto 500
+         if(nname.gt.0) call tbxxerr(' Dict_ must precede ocif_')
+         dict_=ocif_(fname)
+         if(.not.dict_)              goto 500
+         dictfl='yes'
+C
+C        At this point is is proper to update xdicnam to fname
+C
+         xdicnam = fname
+C
+C....... Loop over data blocks; extract _name's, _type etc.
+C
+200      if(.not.data_(' '))         goto 400
+         lbloc = lastnb(bloc_)
+         if(bloc_(1:1).eq.'_'.or.glob_.or.bloc_.eq.' ') then
+           call tbxxclc(bname,lbname,bloc_(1:lbloc),lbloc)
+         else
+           call tbxxclc(bname,lbname,'_'//bloc_(1:lbloc),lbloc+1)
+         endif
+C
+C        see if this is a dictionary defining block
+C
+         do i = 1,2
+           if(charnp_(dt(i),name,lstrg)) then
+             xdicnam = name(1:lstrg)
+             do j = 1,2
+               if(test_(dv(j))) then
+                 xdicver = strg_(1:max(1,long_))
+                 goto 200
+               endif
+             enddo
+             goto 200
+           endif
+         enddo
+C
+Cdbg     WRITE(6,*) ndict,bloc_
+C
+C        Analyze loop structure for categories, names, types and parents
+C
+C
+C        initalize loop info
+C
+         icloop = -1
+         inloop = -1
+         ialoop = -1
+         imloop = -1
+         itloop = -1
+         ictype = 0
+         intype = 0
+         iatype = 0
+         imtype = 0
+         iptype = 0
+         ittype = 0
+         iritype = 0
+         irftype = 0
+         icktype = 0
+         ixmtyp = 0
+         bcname = ' '
+         bpname = ' '
+         lbcname = 1
+         lbpname = 1
+         baname = ' '
+         batag = ' '
+         lbaname = 1
+         btname = ' '
+         mycat=0
+         loop_=.false.
+         loopnl=0
+         nmatch=0
+         ksmatch=0
+         riname = ' '
+         rfname = ' '
+C
+C        Pick up category_keys and list_references
+C
+         do i = 1,4
+210        if(charnp_(ck(i),name,lstrg)) then
+             if (icktype.ne.0 .and. icktype.ne.i)
+     *         call tbxxwarn
+     *         (' Multiple DDL 1, 2 or m related key definitions ')
+             icktype = i
+             if (tbxxnewd(name(1:lstrg),ick)) then
+               catkey(ick) = .true.
+             else
+               if(.not.catkey(ick)) then
+                 ifind = aroot(ick)
+215              catkey(ifind) = .true.
+                 ifind = alias(ifind)
+                 if (ifind.ne.0) go to 215
+               endif
+             endif
+             if (loop_) go to 210
+           endif
+         enddo
+
+C
+C        Process related items
+C
+         do i = 1,2
+           if(charnp_(ri(i),name,lstrg)) then
+             if (iritype.ne.0)
+     *         call tbxxwarn
+     *         (' Multiple DDL 1 and 2 related item definitions ')
+             iritype = i
+             call tbxxnlc(riname,name(1:lstrg))
+C
+C            Seek the matching function, may be in the same loop or not
+C
+             if(charnp_(rf(i),name,lstrg)) then
+               if (irftype.ne.0)
+     *           call tbxxwarn
+     *           (' Multiple DDL 1 and 2 related item functions ')
+               irftype = i
+               call tbxxnlc(rfname,name(1:lstrg))
+             endif
+           endif
+         enddo
+         loop_ = .false.
+         loopnl = 0
+C
+C        Process categories
+C
+         do i = 1,5
+           if(charnp_(ct(i),name,lstrg)) then
+             if(i.eq.5) then
+C
+C              if this is a DDLm _defintion.scope with a value of
+C              category, we need to get the name from _defintion.id
+C
+               call tbxxnlc(bcname,name(1:lstrg))
+               if(bcname.eq.'category') then
+                 if(.not.charnp_(nt(3),name,lstrg)) then
+                   call tbxxwarn(
+     *             ' DDLm category defintion without _definition.id ')
+                 else
+                   go to 216
+                 endif
+               endif
+             endif
+
+             if(ictype.ne.0)
+     *         call tbxxwarn(
+     *           ' Multiple DDL 1, 2 or m category definitions ')
+             ictype = i
+             if(loop_) icloop = loopnl
+             call tbxxnlc(bcname,name(1:lstrg))
+             lbcname=long_
+             nmycat = ndcname+1
+             call hash_store(bcname(1:long_),
+     *         dcname,dcchain,NUMDICT,ndcname,dchash,NUMHASH,mycat)
+             if(mycat.eq.0) then
+               call tbxxerr(' Dictionary category names > NUMDICT ')
+             endif
+             if (mycat.eq.nmycat) then
+               ccatkey(mycat) = 0
+               xmcind(mycat)=0
+             endif
+C
+C            if this is not a loop of categories, we expect a match
+C            against the block name, unless we are doing replacements
+C
+             if(.not.loop_) then
+               if(ictype.eq.1) then
+                 if(bname(1:min(lbname,lbcname+2)).ne.
+     *            '_'//bcname(1:lbcname)//'.'
+     *            .and. catchk.eq.'yes'
+     *            .and. (rfname(1:7).ne.'replace')) then
+                 call tbxxwarn(' Category id does not match block name')
+                 endif
+               else
+                 if(ictype.eq.2) then
+                   if(bcname.ne.'dictionary_definition' .and.
+     *                bcname.ne.'category_overview') then
+                   if(bname(1:min(lbname,lbcname+2)).ne.
+     *               '_'//bcname(1:lbcname)//'_') then
+                   if(bname(1:min(lbname,lbcname+1)).ne.
+     *               '_'//bcname(1:lbcname)
+     *            .and. catchk.eq.'yes'
+     *            .and. (rfname(1:7).ne.'replace')) then
+                   call tbxxwarn(
+     *               ' Category id does not match block name')
+                   endif
+                   endif
+                   endif
+                 endif
+               endif
+             endif
+           endif
+           loop_ = .false.
+           loopnl = 0
+         enddo
+C
+C        Process XML translations
+C
+216      loop_ = .false.
+         loopnl = 0
+         if(charnp_('_xml_mapping.token',xmtoken,lxmtoken)) then
+230        if(charnp_('_xml_mapping.token_type',xmtyp,lxmtyp)) then
+             if(charnp_('_xml_mapping.target',xmtarg,lxmtarg)) then
+               if (xmnxlat.ge.XMLDEFS) then
+                 call tbxxerr(' XML translations > XMLDEFS')
+               else
+                 xmnxlat=xmnxlat+1
+                 xmlate(xmnxlat)=xmtarg(1:lxmtarg)
+               endif
+               if (xmtyp.eq.'data') then
+                 ixmtyp = 1
+                 if (xmdata.eq.0) then
+                   xmdata = xmnxlat
+                 else
+                   call tbxxwarn(' XML duplicate DATA_ translation')
+                 endif
+               endif
+               if (xmtyp(1:lxmtyp).eq.'category') then
+                 ixmtyp = 2
+                 nxmc = ndcname+1
+                 call tbxxnlc(xxxtemp,xmtoken(1:lxmtoken))
+                 call hash_store(xxxtemp,
+     *           dcname,dcchain,NUMDICT,ndcname,dchash,NUMHASH,kxmc)
+                 if( kxmc.eq.nxmc) then
+                   ccatkey(kxmc) = 0
+                   xmcind(kxmc) = xmnxlat
+                 else
+                   if (xmcind(kxmc).ne.0) then
+                     call tbxxwarn(
+     *                 ' XML duplicate category translation')
+                   else
+                     xmcind(kxmc) = xmnxlat
+                   endif
+                 endif
+               endif
+               if (xmtyp.eq.'item') then
+                 ixmtyp = 3
+                 if (tbxxnewd(xmtoken(1:lxmtoken),ifind)) then
+                   xmindex(ifind) = xmnxlat
+                 else
+                   if (xmindex(ifind).ne.0) then
+                     call tbxxwarn(' XML duplicate item translation')
+                   else
+                     ifind = aroot(ifind)
+ 235                 xmindex(ifind) = xmnxlat
+                     ifind = alias(ifind)
+                     if (ifind.ne.0) go to 235
+                   endif
+                 endif
+               endif
+               if(loop_) then
+                 if(charnp_('_xml_mapping.token',xmtoken,lxmtoken)) then
+                   go to 230
+                 else
+                   call tbxxerr(' XML dictionary logic error')
+                 endif
+               endif
+             else
+               call tbxxerr(' XML target missing')
+             endif
+           else
+             call tbxxerr(' XML token_type missing')
+           endif
+         else
+           xmtoken = bname(1:lbname)
+           lxmtoken=lbname
+           if(charnp_('_xml_mapping.token_type',xmtyp,lxmtyp)) then
+             if(charnp_('_xml_mapping.target',xmtarg,lxmtarg)) then
+               if (xmnxlat.ge.XMLDEFS) then
+                 call tbxxerr(' XML translations > XMLDEFS')
+               else
+                 xmnxlat=xmnxlat+1
+                 xmlate(xmnxlat)=xmtarg(1:lxmtarg)
+               endif
+               if (xmtyp(1:lxmtyp).eq.'data') then
+                 ixmtyp = 1
+                 if (xmdata.eq.0) then
+                   xmdata = xmnxlat
+                 else
+                   call tbxxwarn(' XML duplicate DATA_ translation')
+                 endif
+               endif
+               if (xmtyp.eq.'category') then
+                 ixmtyp = 2
+                 nxmc = ndcname+1
+                 call tbxxnlc(xxxtemp,xmtoken(1:lxmtoken))
+                 call hash_store(xxxtemp,
+     *           dcname,dcchain,NUMDICT,ndcname,dchash,NUMHASH,kxmc)
+                 if( kxmc.eq.nxmc) then
+                   ccatkey(kxmc) = 0
+                   xmcind(kxmc) = xmnxlat
+                 else
+                   if (xmcind(kxmc).ne.0) then
+                     call tbxxwarn(
+     *                 ' XML duplicate category translation')
+                   else
+                     xmcind(kxmc) = xmnxlat
+                   endif
+                 endif
+               endif
+               if (xmtyp.eq.'item') then
+                 ixmtyp = 3
+                 if (tbxxnewd(xmtoken(1:lxmtoken),ifind)) then
+                   xmindex(ifind) = xmnxlat
+                 else
+                   if (xmindex(ifind).ne.0) then
+                     call tbxxwarn(' XML duplicate item translation')
+                   else
+                     ifind = aroot(ifind)
+ 240                 xmindex(ifind) = xmnxlat
+                     ifind = alias(ifind)
+                     if (ifind.ne.0) go to 240
+                     xmindex(ifind) = xmnxlat
+                   endif
+                 endif
+               endif
+               if(loop_) then
+                 call tbxxerr(' XML dictionary logic error')
+               endif
+             else
+               call tbxxerr(' XML target missing')
+             endif
+           endif
+         endif
+C
+C        Process names
+C
+         bxname = ' '
+         do i = 1,3
+         if(charnp_(nt(i),name,lstrg)) then
+           if(intype.ne.0)
+     *       call tbxxwarn(
+     *         ' Multiple DDL 1 and 2 or m name definitions ')
+           intype = i
+           call tbxxnlc(bxname,name(1:lstrg))
+           if(loop_) inloop = loopnl
+         endif
+         loop_ = .false.
+         loopnl=0
+         enddo
+         if(intype.eq.0.and.ictype.lt.3.and.(.not.glob_)
+     *     .and.bname(1:lbname).ne.' '.and.ixmtyp.eq.0)
+     *     call tbxxwarn (' No name defined in block')
+         loop_ = .false.
+         if(charnp_(at(1),name,lstrg)) then
+           iatype=1
+           call tbxxnlc(baname,name(1:lstrg))
+           batag = name(1:lstrg)
+           lbaname = lstrg
+           if(loop_) ialoop = loopnl
+         endif
+         loop_ = .false.
+         loopnl=0
+         mcstrg = "no"
+         if(ictype.ne.3) then
+           do i=1,3
+             if(charnp_(tt(i),name,lstrg)) then
+               if(ittype.ne.0)
+     *           call tbxxwarn(
+     *             ' Multiple DDL 1 and 2 type definitions ')
+               ittype = i
+               call tbxxnlc(btname,name(1:lstrg))
+               if(loop_) itloop = loopnl
+             endif
+             loop_ = .false.
+             loopnl=0
+           enddo
+           do i = 1,2
+             if(charnp_(mc(i),name,lstrg)) then
+               if (imtype.ne.0)
+     *           call tbxxwarn(' Multiple DDL 1 and 2 mandatory codes ')
+               imtype = i
+               call tbxxnlc(mcstrg,name(1:lstrg))
+               if (loop_) imloop = loopnl
+             endif
+             loop_ = .false.
+             loopnl=0
+           enddo
+         endif
+C
+C        Now test for consistent combinations
+C
+         if(inloop.ne.-1) then
+           if(icloop.ne.-1.and.icloop.ne.inloop
+     *            .and. catchk.eq.'yes')
+     *       call tbxxwarn(
+     *       ' Categories and names in different loops')
+           if(iatype.ne.0.and.ialoop.ne.inloop) then
+             if(ialoop.eq.-1) then
+               if(bxname.ne.bname(1:lbname))
+     *          call tbxxwarn(
+     *         ' One alias, looped names, linking to first')
+             else
+               call tbxxwarn(
+     *         ' Aliases and names in different loops '
+     *         //' only using first alias ')
+             endif
+           endif
+           if(itloop.ne.-1.and.itloop.ne.inloop)
+     *       call tbxxwarn(
+     *       ' Types and names in different loops')
+           if(imloop.ne.-1.and.imloop.ne.inloop)
+     *       call tbxxwarn(
+     *       ' Mandatory codes and names in different loops')
+         else
+           if(icloop.ne.-1)
+     *       call tbxxwarn(
+     *         ' Multiple categories for one name')
+           if(itloop.ne.-1)
+     *       call tbxxwarn(
+     *         ' Multiple types for one name')
+           if(imloop.ne.-1)
+     *       call tbxxwarn(
+     *         ' Multiple madatory codes for one name')
+         endif
+C
+C        Pick up parents
+C
+         do i = 1,2
+220        if(charnp_(pt(i),name,lstrg)) then
+             if (iptype.ne.0 .and. iptype.ne.i)
+     *         call tbxxwarn
+     *         (' Multiple DDL 1 and 2 parent definitions ')
+             iptype = i
+             call tbxxnlc(bpname,name(1:lstrg))
+             lbpname=long_
+C
+C            Seek the matching child, may be in the same loop or not
+C
+             if (charnp_(pc(i),name,lstrg)) then
+               nresult = tbxxnewd(name(1:lstrg),ifind)
+               nresult = tbxxnewd(bpname(1:lbpname),dpindex(ifind))
+               bpname = ' '
+               lbpname = 1
+             endif
+             if (loop_) go to 220
+           endif
+         enddo
+
+C
+C        Now we need to process value enumerations and ranges
+C        and load them into item value table
+C
+         if (tcheck .eq. 'yes' .and. bxname.ne.' ') then
+         loop_ = .false.
+         nresult = tbxxnewd(bxname,ifind)
+
+         do i = 1,2
+5400       if(charnp_(ve(i),name,lstrg) .and. nivt.lt.NUMIVALS) then
+             call tbxxsstb(name(1:lstrg),sindex)
+             if (sindex.gt.0) then
+               if (deindex(ifind).eq.0) then
+                 deindex(ifind)=nivt+1
+               else
+                 kivt = deindex(ifind)
+5410             if (ivtnxt(kivt).ne.0) then
+                   kivt = ivtnxt(kivt)
+                   go to 5410
+                 endif
+                 ivtnxt(kivt)=nivt+1
+               endif
+               nivt = nivt+1
+               ivtnxt(nivt)=0
+               ivtvet(nivt)=0
+               ivtsbp(nivt)=sindex
+             endif
+           endif
+           if (loop_) go to 5400
+         enddo
+
+
+         do i = 1,2
+         loop_ = .false.
+5420     strg_=' '
+         long_=1
+         nresult = test_(vr(i))
+         if (strg_(1:long_).ne.' '.and.type_.eq.'null')
+     *     nresult = .true.
+         if (nresult .and. nivt.lt.NUMIVALS) then
+           nresult = charnp_(vr(i),name,lstrg)
+           if (type_.ne.'char'.and.type_.ne.'numb') then
+             name = '.'
+             lstrg = 1
+           endif
+           kvrtp = -1
+           if(i.eq.1 .and. lstrg<len(name)-2) then
+             strg_=' '
+             long_=1
+             nresult = test_(vr(3))
+             if (strg_(1:long_).ne.' '.and.
+     *         type_.eq.'null') nresult = .true.
+             if (nresult) then
+               nresult = charnp_(vr(3),
+     *           name(lstrg+2:len(name)),kstrg)
+               if (type_.ne.'char'.and.type_.ne.'numb') then
+                 name(lstrg+2:len(name)) = '.'
+                 kstrg = 1
+               endif
+               if (name(1:lstrg).ne.name(lstrg+2:lstrg+1+kstrg))
+     *           kvrtp = 1
+               name(lstrg+1:lstrg+1)=':'
+               lstrg = lstrg+kstrg+1
+               endif
+             endif
+             if (name(1:lstrg).eq.'.:.') then
+               loop_=.false.
+             else
+               call tbxxsstb(name(1:lstrg),sindex)
+               if (sindex.gt.0) then
+                 if (deindex(ifind).eq.0) then
+                   deindex(ifind)=nivt+1
+                 else
+                   kivt = deindex(ifind)
+5430               if (ivtnxt(kivt).ne.0) then
+                     kivt = ivtnxt(kivt)
+                     go to 5430
+                   endif
+                   ivtnxt(kivt)=nivt+1
+                 endif
+                 nivt = nivt+1
+                 ivtnxt(nivt)=0
+                 ivtvet(nivt)=kvrtp
+                 ivtsbp(nivt)=sindex
+               endif
+               if(loop_) go to 5420
+             endif
+           endif
+         enddo
+         endif
+
+C
+C        This is the main loop
+C
+250      if(ictype.eq.5.or.intype.eq.0) goto 200
+         if(.not.charnp_(nt(intype),name,lstrg)) goto 200
+         kdict=ndict+1
+251      nresult = tbxxnewd(name(1:lstrg),ifind)
+         if (bpname .ne. ' ') then
+           nresult=tbxxnewd(bpname(1:lbpname),dpindex(ifind))
+           bpname = ' '
+           lbpname = 1
+         endif
+         nresult = tbxxoldd(bxname,jfind)
+         if (nresult.and.jfind.ne.ifind.and.deindex(ifind).eq.0)
+     *     deindex(ifind) = deindex(jfind)
+         if(ifind.le.idstrt) then
+           if (kdup .lt. 0) then
+             call tbxxerr(' Duplicate name in dictionary '//
+     *       dictag(ifind)(1:lastnb(dictag(ifind))))
+           endif
+           if (kdup .gt.0) go to 254
+           dicnam(ifind)=char(0)
+           goto 251
+254        continue
+         endif
+         if(dicnam(ifind).eq.bname(1:lbname)) nmatch=ifind
+         if(dicnam(ifind)(1:lbname).eq.bname(1:lbname)) ksmatch=ifind
+Cdbg     if(dicnam(ifind).ne.bname(1:lbname))
+Cdbg *   call tbxxwarn (' Name mismatch: '//dicnam(ifind)//bname(1:lbname))
+         if(inloop.ge.0)then
+C
+C          We are in a loop of names.  If it is the same loop as
+C          for categories, we need to extract the matching category
+C
+           if(inloop.eq.icloop) then
+             mycat=0
+             if(charnp_(ct(ictype),name,lstrg)) then
+               call tbxxnlc(bcname,name(1:lstrg))
+               lbcname=lstrg
+               nmycat=ndcname+1
+               call hash_store(bcname,
+     *         dcname,dcchain,NUMDICT,ndcname,dchash,NUMHASH,mycat)
+               if(mycat.eq.0) then
+                 call tbxxerr(' Dictionary category names > NUMDICT ')
+               endif
+               if(mycat.eq.nmycat) ccatkey(mycat)=0
+             endif
+           endif
+C
+C          If it is the same loop as for types, we need to extract
+C          the matching type
+C
+           if(inloop.eq.itloop) then
+             btname=' '
+             if(charnp_(ct(ittype),name,lstrg)) then
+               call tbxxnlc(btname,name(1:lstrg))
+             endif
+           endif
+C
+C          If it is the same loop as for mandatory codes, we need to extract
+C          the matching mandatory
+C
+           if(inloop.eq.imloop) then
+             mcstrg='no'
+             if(charnp_(mc(imtype),name,lstrg)) then
+               call tbxxnlc(mcstrg,name(1:lstrg))
+             endif
+           endif
+C
+C          If it is the same loop as for aliases, we need to extract
+C          the matching alias
+C
+           if(inloop.eq.ialoop) then
+             baname=' '
+             batag=' '
+             if(charnp_(at(1),name,lstrg)) then
+               call tbxxnlc(baname,name(1:lstrg))
+               batag = name(1:lstrg)
+               lbaname = lstrg
+             endif
+           endif
+         endif
+C
+C        now we have a name stored in dicnam at location ifind
+C        the index of the category in mycat, the type in btname,
+C        the alias in baname, and the mandatory code in mcstrg
+C
+C        First verify match between the name and category, if
+C        we have one, or extract from the block name
+C
+         if (mycat.eq.0) then
+         if (dcindex(ifind).eq.0) then
+           if (dicnam(ifind).eq.bloc_) then
+             call tbxxcat(dicnam(ifind),bcname,lbcname)
+Cdbg         call tbxxwarn(' Extracting category name from block name '
+Cdbg *       //bloc_(1:max(1,lastnb(bloc_))))
+             if(bcname(1:1).ne.' ') then
+               ictype = 1
+               nmycat = ndcname+1
+               call hash_store(bcname,
+     *         dcname,dcchain,NUMDICT,ndcname,dchash,NUMHASH,mycat)
+               if(mycat.eq.0) then
+                 call tbxxerr(' Dictionary category names > NUMDICT ')
+               endif
+               if (mycat.eq.nmycat) then
+                 ccatkey(mycat) = 0
+                 xmcind(mycat) = 0
+               endif
+             else
+               if(catchk.eq.'yes')
+     *         call tbxxwarn(' No category defined in block '
+     *       //bloc_(1:max(1,lastnb(bloc_)))//' and name '
+     *       //dicnam(ifind)(1:max(1,lastnb(dicnam(ifind))))
+     *       //' does not match')
+             endif
+           endif
+         endif
+         else
+         if (bcname(1:lbcname).ne.'dictionary_definition' .and.
+     *     bcname(1:lbcname).ne.'category_overview') then
+           if (dicnam(ifind)(1:lbcname+1).ne.'_'//bcname(1:lbcname)
+     *        .or.( dicnam(ifind)(lbcname+2:lbcname+2).ne.'_' .and.
+     *          dicnam(ifind)(lbcname+2:lbcname+2).ne.'.' .and.
+     *          dicnam(ifind)(lbcname+2:lbcname+2).ne.' ' )) then
+                if (catchk.eq.'yes'.and.rfname(1:7).ne.'replace')
+     *          call tbxxwarn(' Item name '//
+     *          dicnam(ifind)(1:max(1,lastnb(dicnam(ifind))))//' '//
+     *       ' does not match category name '//bcname(1:lbcname))
+           endif
+         endif
+         endif
+C
+C        We will need the type in what follows.  cif_mm.dic defines
+C        some higher level types.  We map them to primitive types
+C
+         mapped = btname(1:4)
+         do i = 1,19
+           if (btname(1:4).eq.map_type(i)) mapped = map_to(i)
+         enddo
+         if (mapped.ne.'char' .and.
+     *       mapped.ne.'text' .and.
+     *       mapped.ne.'null' .and.
+     *       mapped.ne.'numb' .and.
+     *       mapped.ne.'    ' ) then
+             if (tcheck .eq. 'yes') then
+               call tbxxwarn (' Item type '//
+     *           btname(1:max(1,lastnb(btname)))//' not recognized')
+             endif
+             mapped = 'char'
+         endif
+
+C
+C        There are two cases to consider, one if the name is new to
+C        the dictionary, the other, if it is not
+C
+         if(ifind.eq.kdict) then
+           aroot(ifind)=ifind
+           alias(ifind)=0
+           dcindex(ifind)=mycat
+           dictyp(ifind)=mapped
+           dicxtyp(ifind)=btname
+           dmcode(ifind) = 0
+           if (mcstrg .eq. 'yes') dmcode(ifind) = 1
+           if (mcstrg .eq. 'implicit') dmcode(ifind) = -1
+         else
+           if(dcindex(ifind).ne.mycat) then
+             if(dcindex(ifind).eq.0) then
+               jfind=ifind
+               if (aroot(ifind).ne.0) jfind=aroot(ifind)
+255            continue
+               dcindex(jfind)=mycat
+               jfind=alias(jfind)
+               if(jfind.ne.0) goto 255
+             else
+               if(mycat.ne.0.and.
+     *           (vcheck.eq.'yes'.or.tcheck.eq.'yes')
+     *           .and.catchk.eq.'yes')  then
+                 if(rfname(1:7).ne.'replace')
+     *           call tbxxwarn(' Attempt to redefine category for item')
+                 endif
+             endif
+           endif
+           if(dictyp(ifind).ne.mapped .or.
+     *       dicxtyp(ifind).ne.btname) then
+             if(dictyp(ifind).eq.' ') then
+               jfind=ifind
+               if (aroot(ifind).ne.0) jfind=aroot(ifind)
+256            continue
+               dictyp(jfind)=mapped
+               dicxtyp(jfind)=btname
+               jfind=alias(jfind)
+               if(jfind.ne.0) go to 256
+             else
+               if(mapped.ne.' '.and.tcheck.eq.'yes')
+     *           call tbxxwarn(' Attempt to redefine type for item')
+             endif
+           endif
+           if(dmcode(ifind).eq.0) then
+             jfind = ifind
+             if (aroot(ifind).ne.0) jfind = aroot(ifind)
+257          continue
+             dmcode(jfind) = 0
+             if (mcstrg.eq.'yes') dmcode(jfind) = 1
+             if (mcstrg.eq.'implicit') dmcode(jfind) = -1
+             jfind=alias(jfind)
+             if(jfind.ne.0) go to 257
+           else
+             if((mcstrg.eq.'yes' .and. dmcode(ifind).lt.0) .or.
+     *         (mcstrg.eq.'implicit' .and. dmcode(ifind).gt.0))
+     *         call tbxxwarn(
+     *           ' Attempt to redefine mandatory code for item')
+           endif
+         endif
+C
+C        now deal with alias, if any.
+C
+         if(baname.ne.' ') then
+           if (tbxxnewd(baname(1:lbaname),iafind)) then
+             dictag(iafind)    =batag
+             aroot(iafind)     =aroot(ifind)
+             if(aroot(iafind).eq.0) aroot(iafind)=ifind
+             catkey(iafind)    =catkey(ifind)
+             alias(ifind)      =iafind
+             dcindex(iafind)   =dcindex(ifind)
+             dictyp(iafind)    =dictyp(ifind)
+             dicxtyp(iafind)   =dicxtyp(ifind)
+             xmindex(iafind)   =xmindex(ifind)
+             dmcode(iafind)    =dmcode(ifind)
+             dpindex(iafind)   =dpindex(ifind)
+             deindex(iafind)   =deindex(ifind)
+           else
+             if(aroot(iafind).ne.0 .and.
+     *         aroot(iafind).ne.iafind) then
+               if(aroot(iafind).eq.ifind .or.
+     *           aroot(iafind).eq.aroot(ifind)) then
+                 call tbxxwarn(' Duplicate definition of same alias')
+               else
+                 call tbxxwarn(' Conflicting definition of alias')
+               endif
+             else
+               if((dcindex(iafind).eq.0.or.
+     *           dcindex(iafind).eq.dcindex(ifind)).and.
+     *           (dictyp(iafind).eq.' '.or.
+     *           (dictyp(iafind).eq.dictyp(ifind) .and.
+     *            dicxtyp(iafind).eq.dicxtyp(ifind)))) then
+                 dcindex(iafind)   =dcindex(ifind)
+                 dictyp(iafind)    =dictyp(ifind)
+                 dicxtyp(iafind)   =dicxtyp(ifind)
+               endif
+               if(xmindex(iafind).eq.0)
+     *           xmindex(iafind)=xmindex(ifind)
+               if(xmindex(ifind).eq.0)
+     *           xmindex(ifind)=xmindex(iafind)
+               if (dmcode(iafind).eq.0)
+     *           dmcode(iafind)=dmcode(ifind)
+               if (dmcode(ifind).eq.0)
+     *           dmcode(ifind)=dmcode(iafind)
+               if (dpindex(iafind).eq.iafind
+     *           .and. dpindex(ifind).ne.ifind)
+     *           dpindex(iafind) = dpindex(ifind)
+               if (dpindex(ifind).eq.ifind
+     *           .and. dpindex(iafind).ne.iafind)
+     *           dpindex(ifind) = dpindex(iafind)
+               if (deindex(ifind).eq.0)
+     *           deindex(ifind)=deindex(iafind)
+               if (deindex(iafind).eq.0)
+     *           deindex(iafind)=deindex(ifind)
+               aroot(iafind)     =aroot(ifind)
+               if(aroot(iafind).eq.0) aroot(iafind)=ifind
+               alias(ifind)      =iafind
+               if (catkey(iafind)) catkey(ifind) = .true.
+               if (catkey(ifind)) catkey(iafind) = .true.
+             endif
+           endif
+         endif
+         if(inloop.ge.0) then
+           baname = ' '
+           batag = ' '
+         endif
+C
+         if(inloop.ge.0.and.loop_) go to 250
+         if(nmatch.eq.0) then
+         if ((ksmatch.eq.0.or.inloop.lt.0)
+     *     .and.(rfname(1:7).ne.'replace')) then
+         call tbxxwarn(' No name in the block matches the block name')
+         endif
+         endif
+C
+C        check for aliases
+C        we execute this loop only in the case of unlooped name
+C        with looped alias
+C
+         if(inloop.lt.0.and.ialoop.ge.0) then
+           loop_=.false.
+           loopnl=0
+           ganame=baname
+260        if(.not.charnp_(at(iatype),name,lstrg)) goto 200
+           call tbxxnlc(baname,name(1:lstrg))
+           batag=name(1:lstrg)
+           lbaname=lstrg
+           if(baname.eq.ganame) then
+             if(loop_) go to 260
+             go to 200
+           endif
+           if(baname.ne.' ') then
+             if (tbxxnewd(baname(1:lbaname),iafind)) then
+             if(iafind.eq.0) call tbxxerr(' CIFdic names > NUMDICT')
+               dictag(iafind)    =batag
+               aroot(iafind)     =aroot(ifind)
+               if(aroot(iafind).eq.0) aroot(iafind)=ifind
+               catkey(iafind)    =catkey(ifind)
+               alias(ifind)      =iafind
+               dcindex(iafind)   =dcindex(ifind)
+               dictyp(iafind)    =dictyp(ifind)
+               dicxtyp(iafind)   =dicxtyp(ifind)
+               xmindex(iafind)   =xmindex(ifind)
+               dmcode(iafind)    =dmcode(ifind)
+               dpindex(iafind)   =dpindex(ifind)
+               deindex(iafind)   =deindex(ifind)
+               ifind=iafind
+             else
+               if(aroot(iafind).ne.0 .and.
+     *           aroot(iafind).ne.iafind) then
+                 if(aroot(iafind).eq.ifind .or.
+     *             aroot(iafind).eq.aroot(ifind)) then
+                   call tbxxwarn(' Duplicate definition of same alias')
+                 else
+                   call tbxxwarn(' Conflicting definition of alias')
+                 endif
+               else
+                 if((dcindex(iafind).eq.0.or.
+     *           dcindex(iafind).eq.dcindex(ifind)).and.
+     *           (dictyp(iafind).eq.' '.or.
+     *           (dictyp(iafind).eq.dictyp(ifind) .and.
+     *            dicxtyp(iafind).eq.dicxtyp(ifind)))) then
+                 dcindex(iafind)   =dcindex(ifind)
+                 dictyp(iafind)    =dictyp(ifind)
+                 dicxtyp(iafind)   =dicxtyp(ifind)
+                 ifind=iafind
+                 endif
+                 if(xmindex(iafind).eq.0)
+     *             xmindex(iafind)=xmindex(ifind)
+                 if(xmindex(ifind).eq.0)
+     *             xmindex(ifind)=xmindex(iafind)
+                 if (dmcode(iafind).eq.0)
+     *             dmcode(iafind)=dmcode(ifind)
+                 if (dmcode(ifind).eq.0)
+     *             dmcode(ifind)=dmcode(iafind)
+                 if (dpindex(iafind).eq.iafind
+     *             .and. dpindex(ifind).ne.ifind)
+     *             dpindex(iafind) = dpindex(ifind)
+                 if (dpindex(ifind).eq.ifind
+     *             .and. dpindex(iafind).ne.iafind)
+     *             dpindex(ifind) = dpindex(iafind)
+                 if (deindex(ifind).eq.0)
+     *             deindex(ifind) = deindex(iafind)
+                 if (deindex(iafind).eq.0)
+     *             deindex(iafind) = deindex(ifind)
+                 aroot(iafind)     =aroot(ifind)
+                 if(aroot(iafind).eq.0) aroot(iafind)=ifind
+                 alias(ifind)      =iafind
+                 if (catkey(iafind)) catkey(ifind) = .true.
+                 if (catkey(ifind)) catkey(iafind) = .true.
+               endif
+             endif
+           endif
+           if(loop_) go to 260
+         endif
+         go to 200
+C
+400      bloc_=' '
+         if (ndcname.ne.0) then
+         do ii = idstrt+1,ndict
+         keychain(ii) = 0
+         if (aroot(ii).eq.0.and.dcindex(ii).eq.0
+     *     .and.catchk.eq.'yes')
+     *     call tbxxwarn(' No category specified for name '//
+     *       dicnam(ii)(1:max(1,lastnb(dicnam(ii)))))
+         enddo
+         endif
+         do ii = idstrt+1,ndict
+         if (dicxtyp(ii).eq.' ') then
+           if (dpindex(ii).ne.ii
+     *       .and. dicxtyp(dpindex(ii)).ne.' ') then
+             dicxtyp(ii) = dicxtyp(dpindex(ii))
+             dictyp(ii) = dicxtyp(dpindex(ii))(1:4)
+           else
+             dicxtyp(ii) = 'null'
+             dictyp(ii) = 'null'
+             if (tcheck.eq.'yes')  then
+               jj = lastnb(dicnam(ii))
+               if (jj.gt.0) then
+               if (dicnam(ii)(jj:jj).ne.'_')
+     *         call tbxxwarn(' No type specified for name '//
+     *           dicnam(ii)(1:max(1,lastnb(dicnam(ii)))))
+               endif
+             endif
+           endif
+         endif
+         if (catkey(ii) .or. dmcode(ii).gt.0) then
+           ifind = aroot(ii)
+           mycat = dcindex(ifind)
+           if (mycat.ne.0) then
+             jj = ccatkey(mycat)
+             if (jj.eq.0) then
+               ccatkey(mycat) = ifind
+             else
+410            if (keychain(jj).eq.0) then
+                 keychain(jj) = ifind
+                 keychain(ifind) = 0
+               else
+                 if(keychain(jj).ne.ifind) then
+                   jj = keychain(jj)
+                   goto 410
+                 endif
+               endif
+             endif
+           endif
+         endif
+         enddo
+         if (.not.append_) then
+           close(dirdev)
+           nrecd=0
+         endif
+         dictfl='no '
+500      continue
+         if (append_) then
+           nrecd=nrecds
+           recend_=recends
+           recbeg_=recbegs
+         endif
+         if(dict_) then
+           dicname_=xdicnam
+           dicver_ =xdicver
+         else
+           tcheck = otchk
+           vcheck = ovchk
+         endif
+         if(tcheck.eq.'yes') vcheck='yes'
+Cdbg     WRITE(6,'(i5,3x,a,2x,a)') (i,dicnam(i),dictyp(i),i=1,ndict)
+         return
+         end
+C
+C
+C
+C
+C
+C >>>>>> Create a new dictionary entry, or find a matching existing one
+C
+         function tbxxnewd(xname,ick)
+         logical   tbxxnewd
+         include  'ciftbx.sys'
+         character xname*(*)
+         character xxxtemp*(NUMCHAR)
+         integer   jck, ick, ilen
+         integer   lastnb
+         tbxxnewd = .true.
+         ilen = lastnb(xname)
+         jck = ndict
+         call tbxxnlc(xxxtemp,xname(1:ilen))
+         call hash_store(xxxtemp,
+     *     dicnam,dicchain,
+     *     NUMDICT,ndict,dichash,NUMHASH,ick)
+         if(ick.eq.0) call tbxxerr(' CIFdic names > NUMDICT')
+         if(ick .eq. jck+1) then
+           dictag(ick) = xname(1:ilen)
+           dictyp(ick) = ' '
+           dicxtyp(ick) = ' '
+           catkey(ick) = .false.
+           dpindex(ick) = ick
+           deindex(ick) = 0
+           alias(ick) = 0
+           aroot(ick) = ick
+           keychain(ick) = 0
+           dcindex(ick) = 0
+           xmindex(ick) = 0
+           dmcode(ick) = 0
+         else
+           tbxxnewd = .false.
+         endif
+         return
+         end
+C
+C
+C
+C
+C
+C >>>>>> Find matching existing dictionary entry if any
+C
+         function tbxxoldd(xname,ick)
+         logical   tbxxoldd
+         include  'ciftbx.sys'
+         character xname*(*)
+         character xxxtemp*(NUMCHAR)
+         integer   ick, ilen
+         integer   lastnb
+         tbxxoldd = .true.
+         ilen = lastnb(xname)
+         call tbxxnlc(xxxtemp,xname(1:ilen))
+         call hash_find(xxxtemp,
+     *     dicnam,dicchain,
+     *     NUMDICT,ndict,dichash,NUMHASH,ick)
+         if(ick.eq.0) tbxxoldd = .false.
+         return
+         end
+C
+C
+C
+C
+C
+C >>>>>> Find position of last non_blank in a string
+C        but never less than 1
+C
+         function lastnb(str)
+C
+         integer    lastnb
+         include   'ciftbx.sys'
+         character*(*) str
+         integer lenn,ihi,itestl
+         lenn = len(str)
+c
+         ihi = lenn
+         if(ihi.eq.0) then
+           ihi = 1
+           go to 200
+         endif
+         itestl = ihi/4
+         if (itestl.lt.4) go to 200
+c
+100      if (ihi.gt.itestl) then
+         if (str(ihi-itestl+1:ihi-itestl+1).eq.' ') then
+           if (str(ihi-itestl+1:ihi).eq.' ') then
+             ihi = ihi-itestl
+             go to 100
+           endif
+         endif
+         endif
+         itestl = itestl/2
+         if (itestl.gt.3) go to 100
+c
+200      if (ihi.gt.1 .and. str(ihi:ihi).eq.' ') then
+           ihi = ihi-1
+           go to 200
+         endif
+         if (ihi.eq.0) ihi = 1
+         lastnb = ihi
+         return
+         end
+C
+C
+C
+C
+C
+C >>>>>> Convert a character to a radix XXRADIX digit
+C
+C        given a character c, return a decimal value
+C
+         function tbxxc2dig(c)
+         integer   tbxxc2dig
+         character*(*) c
+         include  'ciftbx.sys'
+C
+         tbxxc2dig = ichar(c)-ichar(' ')
+C
+C        The code above may not be portable, especially to non-ascii
+C        computer systems.  In that case, comment out the line above
+C        and uncomment the following lines.  Be sure to make the
+C        matching change in tbxxd2chr.  Be certain to have at least
+C        XXRADIX characters in the search string.
+C
+C         tbxxc2dig = index(
+C     *   '+-01234567890'//
+C     *   'abcdefghijlmnopqrstuvwxyz'//
+C     *   'ABCDEFGHIJKLMNOPQRSTUVWXYZ',c)-1
+         return
+         end
+C
+C
+C
+C
+C
+C >>>>>> Convert a radix XXRADIX digit to a character
+C
+C        given an integer value, return a character
+C
+         function tbxxd2chr(d)
+         character*1 tbxxd2chr
+         integer   d
+         include  'ciftbx.sys'
+C
+         tbxxd2chr = char(d+ichar(' '))
+C
+C        The code above may not be portable, especially to non-ascii
+C        computer systems.  In that case, comment out the line above
+C        and uncomment the following lines.  Be sure to make the
+C        matching change in tbxxc2dig.  Be certain to have at least
+C        XXRADIX characters in the search string.
+C
+C         character*(XXRADIX) digits
+C         digits =
+C     *   '+-01234567890'//
+C     *   'abcdefghijlmnopqrstuvwxyz'//
+C     *   'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+C         tbxxd2chr = digits(d+1:d+1)
+         return
+         end
+C
+C
+C
+C
+C
+C >>>>>> Convert a string to Run Length Encoded version
+C
+         subroutine tbxxrle(astr,bstr,mlen)
+C
+C        astr is the raw input string
+C        bstr is the run-length-encoded string
+C          beginning with the compressed length in
+C            in base-XXRADIX in the first four characters
+C          followed by either individual characters or run
+C          flagged by XXFLAG
+C        XXFLAG//tbxxd2chr(n)//c represents n copies of c
+C
+         character*(*) astr, bstr
+         include  'ciftbx.sys'
+         character*1 c
+         character*1 tbxxd2chr
+         integer tbxxc2dig
+         integer klen, krep, ialen, iblen, mode, ii
+         integer mlen
+C
+         ialen = len(astr)
+         iblen = len(bstr)
+         mode = 0
+         klen = 4
+         bstr(1:4) = tbxxd2chr(0)//tbxxd2chr(0)
+     *     //tbxxd2chr(0)//tbxxd2chr(0)
+         do ii = 1,ialen
+           c = astr(ii:ii)
+           if (mode .eq. -2) then
+             krep = tbxxc2dig(bstr(klen-1:klen-1))
+             if (c.eq.bstr(klen:klen).and.krep.lt.XXRADIX-1) then
+               bstr(klen-1:klen-1) = tbxxd2chr(krep+1)
+             else
+               mode = 0
+               if (c.eq.bstr(klen:klen)) mode=-1
+             endif
+           endif
+           if (klen.ge.iblen) go to 100
+           if (mode .ge.-1 .and. mode .le.2) then
+             klen = klen+1
+             bstr(klen:klen) = c
+             if (klen .gt. 5) then
+               if (c.eq.bstr(klen-1:klen-1)) mode=mode+1
+               if (c.ne.bstr(klen-1:klen-1)) mode=0
+             endif
+             if (c.eq.XXFLAG .and. klen.lt.iblen-1) then
+               bstr(klen+1:klen+2) = tbxxd2chr(1)//c
+               mode = -2
+               klen = klen+2
+             endif
+           endif
+           if (mode.eq.2) then
+             bstr(klen-2:klen-1) = XXFLAG//tbxxd2chr(3)
+             mode = -2
+           endif
+         enddo
+ 100     mlen = klen
+         do ii = 4,1,-1
+           bstr(ii:ii) = tbxxd2chr(mod(klen,XXRADIX))
+           klen = klen/XXRADIX
+         enddo
+         return
+         end
+C
+C
+C
+C
+C
+C >>>>>> Decode a string from  Run Length Encoded version
+C
+         function tbxxrld(astr,bstr,fill)
+C
+C        astr is the raw output string
+C        bstr is the run-length-encoded string
+C          beginning with the compressed length in
+C            in base-XXRADIX in the first four characters
+C          followed by either individual characters or run
+C          flagged by char(0)
+C        char(0)//char(n)//c represents n copies of c
+C        fill is a logical variable, .true. to fill astr with blanks
+C        the return value is the number of valid characters in astr
+C        never less than 1
+C
+C
+         character*(*) astr, bstr
+         logical fill
+         integer tbxxrld
+         include  'ciftbx.sys'
+         character*1 c
+         integer tbxxc2dig
+         integer klen, krep, ialen, mode, ipos
+         integer ii, jj
+C
+         tbxxrld = 1
+         krep = 0
+         ialen = len(astr)
+         if (fill) then
+           astr = ' '
+         else
+           astr(1:1) = ' '
+         endif
+         mode = 0
+         klen = 0
+         do ii = 1,4
+           klen = klen*XXRADIX+tbxxc2dig(bstr(ii:ii))
+         enddo
+         mode = 0
+         ipos = 0
+         do ii = 5,klen
+           c = bstr(ii:ii)
+           if(mode.eq.0) then
+             if(c.ne.XXFLAG) then
+               if (ipos.ge.ialen) then
+                 tbxxrld = ialen
+                 return
+               endif
+               ipos = ipos+1
+               astr(ipos:ipos) = c
+             else
+               mode = 1
+             endif
+           else
+             if (mode.eq.1) then
+               krep = tbxxc2dig(c)
+               mode = -1
+             else
+               do jj = 1,krep
+                 if (ipos.ge.ialen) return
+                 ipos=ipos+1
+                 astr(ipos:ipos) = c
+               enddo
+               mode = 0
+             endif
+           endif
+         enddo
+         if(ipos .lt. ialen) astr(ipos+1:ipos+1) = ' '
+         tbxxrld = max(ipos,1)
+         return
+         end
+C
+C
+C
+C
+C
+C >>>>>> Extract the item.category_id from a save frame name
+C
+         subroutine tbxxcat(sfname,bcname,lbcname)
+C
+         character*(*) sfname,bcname
+         integer lbcname,ii,ic,lastnb,lenn
+C
+C        Note that this logic works only for item.category_id
+C        not for category.id
+C
+         lenn = lastnb(sfname)
+         bcname = ' '
+         lbcname = 1
+         if (lenn.eq.0.or.sfname(1:1).ne.'_') return
+         do ii = 1,lenn-2
+         ic = 1+lenn-ii
+         if (sfname(ic:ic).eq.'.') then
+           bcname = sfname(2:ic-1)
+           lbcname = ic-2
+           return
+         endif
+         enddo
+         return
+         end
+C
+C
+C
+C
+C
+C >>>>>> Fetch line from direct access file
+C
+         subroutine tbxxflin(linno,lip,lipag,lipof,kip,ip,mip,mis)
+C
+         include   'ciftbx.sys'
+         integer    linno,lip,kip,ip,mip,mis,i,mipno,miprno, kzero
+         integer    lipag,lipof,kmode
+C
+C        linno -- the line number to locate
+C        lip   -- the location of the line
+C                   (page*(NUMCPP/NUMCIP)+offset)
+C        lipag -- the page number (1...)
+C        lipof -- the offset (1...)
+C        kip   -- subindex number
+C        ip    -- subindex offset
+C        mip   -- master index number
+C        mis   -- master index offset
+
+         kip = (linno-1)/NUMSIP + 1
+         ip = mod(linno-1,NUMSIP) + 1
+         mip = (kip-1)/NUMMIP + 1
+         mis = mod(kip-1,NUMMIP) + 1
+C
+C        test subindex page number against number in memory
+C
+         if (kip.ne.iabs(ipim)) then
+C
+C          save the current subindex page if it has been written
+C
+           if (ipim.lt.0) then
+             do i = 1,NUMSIP
+               write(scrbuf(NUMCIP*(i-1)+1:NUMCIP*i),'(i8)')
+     *           ippoint(i)
+             enddo
+             write(dirdev,'(a)',rec=iabs(iprim)) scrbuf
+             ipim = -ipim
+           endif
+C
+C          find the appropriate master index page and slot
+C
+           if (mip.ne.iabs(mipim)) then
+C
+C            save the current master index page if it has been written
+C
+             if (mipim.lt.0) then
+               write(scrbuf(1:NUMCIP),'(i8)')mipcp
+               do i = 1,NUMMIP
+                 write(scrbuf(NUMCIP*i+1:NUMCIP*(i+1)),'(i8)')
+     *             mippoint(i)
+               enddo
+               write(dirdev,'(a)',rec=iabs(miprim))scrbuf
+               mipim = -mipim
+             endif
+C
+C            search the master index pages for a match
+C
+             mipno = 0
+             miprno = 1
+             kzero = 0
+             kmode = 1
+ 10          read(dirdev,'(a)',rec=miprno) scrbuf
+             mipno = mipno+1
+             read(scrbuf(1:NUMCIP),'(i8)') mipcp
+             if (mipno.ne.mip) then
+               if (mipcp.eq.0) then
+                 if (nfword.gt.1) then
+                   nfblock = nfblock+1
+                   nfword = 1
+                 endif
+                 mipcp = nfblock
+                 nfblock = nfblock+1
+                 write(scrbuf(1:NUMCIP),'(i8)') mipcp
+                 write(dirdev,'(a)',rec=miprno) scrbuf
+                 scrbuf = ' '
+                 write(scrbuf(1:NUMCIP),'(i8)') kzero
+                 write(dirdev,'(a)',rec=mipcp) scrbuf
+                 kmode = -1
+               endif
+               miprno = mipcp
+               go to 10
+             endif
+C
+C            Have the master index in scrbuf, copy to mippoint
+C
+             do i = 1,NUMMIP
+               if (scrbuf(NUMCIP*i+1:NUMCIP*(i+1)).eq.' ') then
+                 mippoint(i) = 0
+               else
+                 read(scrbuf(NUMCIP*i+1:NUMCIP*(i+1)),'(i8)')
+     *             mippoint(i)
+               endif
+             enddo
+             mipim =kmode* mip
+             miprim = miprno
+           endif
+C
+C          See if the subindex page exists
+C
+           if (mippoint(mis).eq.0) then
+             do i = 1,NUMSIP
+               ippoint(i) = 0
+             enddo
+             if (nfword.gt.1) then
+               nfblock=nfblock+1
+               nfword = 1
+             endif
+             mippoint(mis) = nfblock
+             mipim = -iabs(mipim)
+             ipim = -kip
+             iprim = -nfblock
+             scrbuf = ' '
+             write(dirdev,'(a)', rec=nfblock) scrbuf
+             nfblock = nfblock+1
+           else
+             read(dirdev,'(a)', rec=mippoint(mis)) scrbuf
+             do i = 1,NUMSIP
+               if (scrbuf(NUMCIP*(i-1)+1:NUMCIP*i).eq.' ') then
+                 ippoint(i) = 0
+               else
+               read(scrbuf(NUMCIP*(i-1)+1:NUMCIP*i),'(i8)')
+     *           ippoint(i)
+               endif
+             enddo
+             ipim = kip
+             iprim = mippoint(mis)
+           endif
+         endif
+         lip = ippoint(ip)
+         lipag = (lip-1)/(NUMCPP/NUMCIP) + 1
+         lipof = mod(lip-1,NUMCPP/NUMCIP) + 1
+         lipof = (lipof-1)*NUMCIP + 1
+         return
+         end
+
+C
+C
+C
+C
+C
+C >>>>>> Store a string in the string table
+C
+         subroutine tbxxsstb(astrg,sindex)
+C
+C        store string astrg in the string table, returning the
+C        index in sindex
+C
+         character *(*) astrg
+         integer sindex
+         include  'ciftbx.sys'
+         character *(MAXBUF) temp
+         integer mlen, ii, ibstb, icstb, ikstb, rlen
+         integer iestb
+
+         call tbxxrle(astrg,temp,mlen)
+         icstb = mod(nstable,NUMCSTB)+1
+         ibstb = (nstable+NUMCSTB)/NUMCSTB
+         iestb = min(NUMCSTB,icstb+mlen-1)
+         ikstb = iestb-icstb+1
+         if (mlen+nstable .le. NUMCSTB*NUMSTB) then
+           stable(ibstb)(icstb:iestb)=temp(1:ikstb)
+           sindex = nstable+1
+           nstable = nstable+mlen
+           rlen = mlen - ikstb
+           if (rlen .gt. 0) then
+             do ii = ikstb+1,mlen,NUMCSTB
+               ibstb = ibstb+1
+               iestb = min(NUMCSTB,rlen)
+               stable(ibstb)(1:iestb) = temp(ii:ii+iestb-1)
+               rlen = rlen - iestb
+             enddo
+           endif
+         else
+           sindex = 0
+           call tbxxwarn(
+     *      ' More than NUMCSTB*NUMSTB stable characters needed')
+         endif
+         return
+         end
+
+C
+C
+C
+C
+C
+C >>>>>> Fetch a string from the string table
+C
+         function tbxxfstb(astrg,sindex,fill)
+C
+C        fetch string astrg from the string table, starting at the
+C        index in sindex, and returning the valid length.
+C
+C        fill is a logical variable, .true. to fill astr with blanks
+C        the return value is the number of valid characters in astr
+C        never less than 1, unless there is no valid string
+
+         integer tbxxfstb
+         character *(*)astrg
+         integer sindex
+         logical fill
+         integer tbxxc2dig, tbxxrld
+         integer rlen
+         integer icstb, ibstb, iestb, ikstb, klen, ii
+
+         include  'ciftbx.sys'
+         character *(MAXBUF) temp
+
+         tbxxfstb = 0
+
+         if (sindex.le.0.or.nstable+3.gt.NUMCSTB*NUMSTB) return
+
+         icstb = mod(sindex-1,NUMCSTB)+1
+         ibstb = (sindex-1+NUMCSTB)/NUMCSTB
+         iestb = min(NUMCSTB,icstb+3)
+         ikstb = iestb-icstb+1
+         temp(1:ikstb)=stable(ibstb)(icstb:iestb)
+
+         rlen = 4-ikstb
+         if (rlen .gt. 0) then
+         temp(ikstb+1:4)=stable(ibstb+1)(1:rlen)
+         endif
+
+         klen = 0
+         do ii = 1,4
+           klen = klen*XXRADIX+tbxxc2dig(temp(ii:ii))
+         enddo
+
+         if (klen.gt.MAXBUF.or.klen.le.0) return
+         if (sindex+klen-1.gt.NUMCSTB*NUMSTB) return
+
+         if (klen.gt.4) then
+           icstb = mod(sindex+3,NUMCSTB)+1
+           ibstb = (sindex+3+NUMCSTB)/NUMCSTB
+           iestb = min(NUMCSTB,icstb+klen-5)
+           ikstb = iestb-icstb+1
+           temp(5:ikstb+4) = stable(ibstb)(icstb:iestb)
+           rlen = klen - ikstb - 4
+           if (rlen .gt. 0) then
+             do ii = ikstb+1,ikstb+rlen,NUMCSTB
+               ibstb = ibstb+1
+               iestb = min(NUMCSTB,rlen)
+               temp(ii:ii+iestb-1) = stable(ibstb)(1:iestb)
+               rlen = rlen - iestb
+             enddo
+           endif
+         endif
+
+         tbxxfstb = tbxxrld(astrg,temp(1:klen),fill)
+         return
+         end
+
+
+C
+C
+C
+C
+C
+C >>>>>> Open a CIF and copy its contents into a direct access file.
+C
+         function ocif_(fname)
+C
+         logical   ocif_
+         integer   lastnb
+         include  'ciftbx.sys'
+         logical   test
+         character fname*(*)
+         integer   lfname
+         integer   case,i,kp,lp,mp
+         integer   klen, mlen, lip, lppag, lipof, kip, ip, mip, mis
+C
+         save_=.false.
+         glob_=.false.
+         depth_=0
+         jchar=MAXBUF
+         lastch=0
+         if(line_.gt.MAXBUF) call tbxxerr(' Input line_ value > MAXBUF')
+         if(nrecd.ne.0 .and. (.not.append_)) then
+           close(dirdev)
+           nrecd=0
+           lrecd=0
+         endif
+C
+C        clear the memory resident page buffer
+C
+         do i = 1,NUMPAGE
+         mppoint(i)=0
+         enddo
+C
+         case=ichar('a')-ichar('A')
+         tab=char(05)
+         if(case.lt.0) goto 100
+         tab=char(09)
+         bloc_=' '
+C
+C....... Make sure the CIF is available to open
+C
+100      file_(1:longf_)=' '
+         lfname = len(fname)
+         file_(1:lfname) = fname
+         do 120 i=1,lfname
+         if(file_(i:i).eq.' ' .or. file_(i:i).eq.char(0) ) goto 140
+120      continue
+140      longf_=i-1
+         if (longf_.gt.0) then
+           inquire(file=file_(1:longf_),exist=test)
+           ocif_=test
+           if(.not.ocif_)      goto 200
+         else
+           file_(1:1) = ' '
+           longf_ = 1
+           ocif_ = .true.
+         endif
+C
+C....... Open up the CIF and a direct access formatted file as scratch
+C
+         if (file_(1:1).ne.' ')
+     *   open(unit=cifdev,file=file_(1:longf_),status='OLD',
+     *                    access='SEQUENTIAL',
+     *                    form='FORMATTED')
+         if(nrecd.eq.0)  then
+           open(unit=dirdev,status='SCRATCH',access='DIRECT',
+     *                    form='FORMATTED',recl=NUMCPP)
+           mipim = -1
+           miprim = 1
+           mipcp = 0
+           ipim = -1
+           iprim = 2
+           do i = 1,NUMPAGE
+             mppoint(i) = 0
+           enddo
+           do i = 1,NUMMIP
+             mippoint(i) = 0
+           enddo
+           mippoint(1)=2
+           do i = 1,NUMSIP
+             ippoint(i) = 0
+           enddo
+           nfblock = 3
+           nfword = 1
+         endif
+         if (mppoint(1).lt.0) then
+            write(dirdev,'(a)',rec=-mppoint(1)) pagebuf(1)
+            mppoint(1) = 0
+         endif
+         if(append_ .and. nrecd.ne.0) then
+           kp = 1
+           lp = nfblock
+           nfblock = nfblock+1
+           mppoint(kp) = lp
+           mp = 1
+         else
+           do kp = 1,NUMPAGE
+             mppoint(kp)=0
+           enddo
+           kp = 1
+           lp = 3
+           nfblock = 4
+           mp = 1
+         endif
+C
+C....... Copy the CIF to the direct access file
+C
+160      read(cifdev,'(a)',end=180) buffer
+         nrecd=nrecd+1
+         irecd=nrecd
+         klen = lastnb(buffer(1:MAXBUF))
+         if (klen.gt.line_)
+     *     call tbxxwarn(' Input line length exceeds line_')
+         call tbxxrle(buffer(1:klen),scrbuf,mlen)
+         if (mp+mlen-1 .gt. NUMCPP) then
+           if (mp.lt.NUMCPP) pagebuf(kp)(mp:NUMCPP) = ' '
+C          write(dirdev,'(a)',rec=lp) pagebuf(kp)
+           mppoint(kp)=-lp
+           if (nfword.gt.1) then
+             nfblock = nfblock+1
+             nfword = 1
+           endif
+           lp = nfblock
+           nfblock=nfblock+1
+           kp = kp+1
+           if(kp.gt.NUMPAGE) kp=1
+           if (mppoint(kp).lt.0) then
+             write(dirdev,'(a)',rec=-mppoint(kp)) pagebuf(kp)
+           endif
+           mppoint(kp)=0
+           mp=1
+         endif
+         pagebuf(kp)(mp:mp+mlen-1)=scrbuf(1:mlen)
+         mppoint(kp) = -lp
+         mlen = ((mlen+NUMCIP-1)/NUMCIP)
+         mlen = mlen*NUMCIP
+         call tbxxflin(nrecd,lip,lppag,lipof,kip,ip,mip,mis)
+         ippoint(ip) = (mp-1)/NUMCIP+(lp-1)*(NUMCPP/NUMCIP)+1
+         ipim = -iabs(ipim)
+         mp = mp+mlen
+         goto 160
+C
+180      if (mp.lt.NUMCPP) pagebuf(kp)(mp:NUMCPP) = ' '
+         if (mp.gt.1) then
+C          write(dirdev,'(a)',rec=lp) pagebuf(kp)
+           mppoint(kp)=-lp
+         endif
+         lrecd=max(0,recbeg_-1)
+         jrecd=max(0,recbeg_-1)
+         jrect=-1
+         irecd=max(0,recbeg_-1)
+         recn_=irecd
+         recend_=nrecd
+         if (file_(1:1).ne.' ') close(cifdev)
+200      return
+         end
+C
+C
+C
+C
+C
+C >>>>>> Close off direct access file of the current CIF
+C         and reset all data name tables and pointers
+C
+         subroutine purge_
+C
+         include   'ciftbx.sys'
+C
+         integer i
+         if(nrecd.ne.0) close(dirdev)
+         do i = 1,NUMPAGE
+           mppoint(i)=0
+         enddo
+         do i = 1,MAXBOOK
+           ibkmrk(1,i)=-1
+           ibkmrk(2,i)=-1
+           ibkmrk(3,i)=-1
+           ibkmrk(4,i)=-1
+           ibkmrk(5,i)=-1
+           ibkmrk(6,i)=-1
+         enddo
+         recn_=0
+         save_=.false.
+         glob_=.false.
+         jchar=MAXBUF
+         depth_=0
+         lastch=0
+         nrecd=0
+         lrecd=0
+         irecd=0
+         nname=0
+         nhash=0
+         iname=0
+         loopct=0
+         loopnl=0
+         loop_=.false.
+         text_=.false.
+         textfl='no '
+         append_=.false.
+         recbeg_=0
+         recend_=0
+         nivt = 0
+         nstable = 0
+         return
+         end
+C
+C
+C
+C
+C
+C >>>>>> Store the data names and pointers for the requested data block
+C
+         function data_(name)
+C
+         logical   data_
+         logical   wasave
+         logical   tbxxoldd
+         integer   lastnb
+         include  'ciftbx.sys'
+         character name*(*),temp*(NUMCHAR),ltype*4
+         character ctemp*(NUMCHAR)
+         character xdname*(NUMCHAR)
+         character ydname*(NUMCHAR)
+         character isbuf*(MAXBUF),lsbuf*(MAXBUF)
+         logical   ixcat(NUMDICT)
+         integer   ndata,idata,nitem,npakt,i,ii,j,k,kchar,krecd
+         integer   jj,icc,idd
+         integer   fcatnum,lctemp,isrecd,isjchr,islast
+         integer   lsrecd,lsjchr,lslast
+         integer   pnname,itpos,ipp,ipj
+         integer   ltemp
+CDBG     if(dictfl.eq.'no ')
+CDBG *     print *,' ***>>>> Entering data_ ',name
+C
+         jchar=MAXBUF
+         depth_=0
+         nname=0
+         ndata=0
+         nhash=0
+         nitem=0
+         idata=0
+         iname=0
+         loopct=0
+         loopnl=0
+         ltype=' '
+         posnam_=0
+         posval_=0
+         posdec_=0
+         posend_=0
+         kchar = 0
+         krecd = 0
+         fcatnum = 0
+         data_=.false.
+         wasave=.false.
+         loop_=.false.
+         text_=.false.
+         textfl='no '
+         glob_=.false.
+         do ii = 1,MAXBOOK
+         ibkmrk(1,ii)=-1
+         enddo
+         irecd=lrecd
+         lrecd=min(nrecd,recend_)
+         if(name(1:1).ne.' ') irecd=max(0,recbeg_-1)
+         call hash_init(dname,dchain,NUMBLOCK,nname,dhash,
+     *     NUMHASH)
+         call hash_init(cname,cchain,NUMBLOCK,ncname,chash,
+     *     NUMHASH)
+         isrecd=irecd
+         isjchr=jchar
+         islast=lastch
+         lsrecd=isrecd
+         lsjchr=isjchr
+         lslast=islast
+         isbuf=' '
+         if(lastch.gt.0)isbuf(1:lastch)=buffer(1:lastch)
+         lsbuf=' '
+         if(lastch.gt.0)lsbuf(1:lastch)=isbuf(1:lastch)
+         call tbxxnlc(xdname,name)
+C
+C....... Find the requested data block in the file
+C
+100      lsjchr=isjchr
+         call getstr
+         isjchr=jchar
+         if(irecd.ne.isrecd) then
+           lsrecd=isrecd
+           lslast=islast
+           lsbuf=' '
+           if(islast.gt.0)lsbuf(1:islast)=isbuf(1:islast)
+           isrecd=irecd
+           islast=lastch
+           isbuf=' '
+           if(lastch.gt.0)isbuf(1:lastch)=buffer(1:lastch)
+         endif
+         if(type_.eq.'fini')           goto 500
+         if(text_.or.depth_.gt.0)      goto 110
+         goto 120
+110      call getstr
+         if (type_.eq.'fini')
+     *      call tbxxerr(' Unexpected termination of file')
+         if (text_.or.depth_.gt.0)     goto 100
+         goto 100
+120      continue
+         if(type_.eq.'save') then
+           if(long_.lt.6) then
+             if(.not.save_)
+     *         call tbxxerr(
+     *           ' Save frame terminator found out of context ')
+             wasave=.true.
+             save_=.false.
+             goto 100
+           else
+             if(save_)
+     *         call tbxxerr(' Prior save frame not terminated ')
+             save_=.true.
+             if(name.eq.' ')          goto 150
+             call tbxxnlc(ydname,strg_(6:long_))
+             if(ydname.ne.xdname) goto 100
+             goto 150
+           endif
+         endif
+         if(type_.eq.'glob') then
+           if(name.ne.' ')            goto 100
+           glob_=.true.
+           goto 150
+         endif
+         if(type_.eq.'name'.or.type_.eq.'loop') then
+           if(name.ne.' ')            goto 100
+           if(.not.wasave)
+     *       call tbxxwarn(' Data block header missing ')
+           isrecd=lsrecd
+           islast=lslast
+           isjchr=lsjchr
+           isbuf=' '
+           if(islast.gt.0)isbuf(1:islast)=lsbuf(1:islast)
+           data_=.true.
+           bloc_=' '
+           itpos=jchar-long_
+           if(tabx_) then
+           itpos=0
+           do ipp=1,jchar-long_
+             itpos=itpos+1
+             if(buffer(ipp:ipp).eq.tab) itpos=((itpos+7)/8)*8
+           enddo
+           endif
+           posnam_=itpos
+           goto 204
+         endif
+         if(type_.ne.'data')          goto 100
+         if(name.eq.' ')              goto 150
+         call tbxxnlc(ydname,strg_(6:long_))
+         if(ydname.ne.xdname)   goto 100
+150      data_=.true.
+         bloc_=strg_(6:long_)
+C
+CDBG     if(dictfl.eq.'no ')
+CDBG *     print *, 'bloc_: '//bloc_
+         itpos=jchar-long_
+         if(tabx_) then
+         itpos=0
+         do ipp=1,jchar-long_
+           itpos=itpos+1
+           if(buffer(ipp:ipp).eq.tab) itpos=((itpos+7)/8)*8
+         enddo
+         endif
+         posnam_=itpos
+C
+C....... Get the next token and identify
+C        ltype is the previous type
+C
+200      call getstr
+CDBG     WRITE(6,*) ltype,type_,loop_,nitem,ndata,idata,iname,nname
+C
+         if(ltype.ne.'name')                goto 201
+         if(type_.eq.'numb')                goto 203
+         if(type_.eq.'char')                goto 203
+         if(type_.eq.'text')                goto 203
+         if(type_.eq.'null')                goto 203
+         if(type_.eq.'tupl'
+     *     .or.type_.eq.'tabl'
+     *     .or.type_.eq.'arra')             goto 203
+         if(type_.eq.'name'.and.loop_)      goto 204
+CDBG     WRITE(6,*) ltype,type_,loop_,nitem,ndata,idata,iname,nname
+         call tbxxerr(
+     *     ' Illegal tag/value construction: tag followed by '
+     *     //type_)    
+C
+C        The prior type was not a name (not a tag)
+201      if(ltype.ne.'valu')                goto 204
+C
+C        The prior type was a data value
+C
+         if(type_.eq.'numb')                goto 202
+         if(type_.eq.'char')                goto 202
+         if(type_.eq.'text')                goto 202
+         if(type_.eq.'null')                goto 202
+         if(type_.eq.'tupl'
+     *     .or.type_.eq.'tabl'
+     *     .or.type_.eq.'arra')             goto 202
+         goto 204
+C
+C        If we have a vaue followed by a value, we need to be
+C        in a loop (item > 0)
+C
+202      if(nitem.gt.0)                     goto 205
+         call tbxxerr(
+     *     ' Illegal tag/value construction: value followed by '
+     *     //type_)
+C
+C        The prior item was a tag and this is a value
+C
+203      ltype='valu'
+CDBG     if(dictfl.eq.'no ')
+CDBG *     print *, ' ***>>>>> data_ value ',strg_(1:long_)
+         goto 205
+C
+C        Cases that get us here
+C          The prior item was a tag and this is a tag in a loop
+C          The prior item was neither a tag nor a value 
+204      ltype=type_
+C
+C        We are in a loop and have a value after a value
+C        or a name after a value or come from above cases
+C
+205      if(type_.eq.'name')           goto 206
+         if(type_.eq.'loop')           goto 210
+         if(type_.eq.'data')           goto 210
+         if(type_.eq.'save')           goto 210
+         if(type_.eq.'glob')           goto 210
+         if(type_.ne.'fini')           goto 220
+206      if(loop_)                     goto 270
+210      if(nitem.eq.0)                goto 215
+C
+C....... End of loop detected; save pointers
+C        loopni(loopct) -- number of items in a row
+C        loopnp(loopct) -- number of rows
+C
+         npakt=idata/nitem
+         if(npakt*nitem.ne.idata) call tbxxerr(' Item miscount in loop')
+         loopni(loopct)=nitem
+         loopnp(loopct)=npakt
+         nitem=0
+         idata=0
+215      if(type_.eq.'name')           goto 270
+         if(type_.eq.'data')           goto 300
+         if(type_.eq.'save')           goto 300
+         if(type_.eq.'glob')           goto 300
+         if(type_.eq.'fini')           goto 300
+C
+C....... Loop_ line detected; incr loop block counter
+C        record the character position in loopos(loopct)
+C        record the line number in        loorec(loopct)
+C        record the detabbed char pos in  loopox(loopct)
+C
+         loop_=.true.
+CDBG     print *,' in data_ loop_ set, type_', type_
+         loopct=loopct+1
+         if(loopct.gt.NUMLOOP) call tbxxerr(
+     *     ' Number of loop_s > NUMLOOP')
+         loorec(loopct)=irecd
+         loopos(loopct)=jchar-long_
+         if(quote_.ne.' ') then
+           if (quote_.eq.';') then
+             loopos(loopct) = 1
+           else
+             if (quote_.eq.''''''''.or.quote_.eq.'"""') then
+               loopos(loopct)=jchar-long_-3
+             else
+               loopos(loopct)=jchar-long_-1
+             end if
+           end if
+         end if
+         itpos=0
+         do ipp=1,loopos(loopct)
+           itpos=itpos+1
+           if(buffer(ipp:ipp).eq.tab) itpos=((itpos+7)/8)*8
+         enddo
+         loopox(loopct)=itpos
+         goto 200
+C
+C....... This is the data item; store char position and length
+C
+220      if(loop_ .and. nitem.eq.0)
+     *   call tbxxerr(' Illegal tag/value construction')
+         loop_=.false.
+C
+         i=nname
+         if(nitem.gt.0) i=i-nitem+mod(idata,nitem)+1
+         if(i.lt.1) call tbxxerr(' Illegal tag/value construction')
+         if(dtype(i).ne.'test')       goto 223
+         if(dictfl.eq.'yes')          goto 223
+         if(tcheck.eq.'no ')          goto 223
+C>>>>    if(long_.eq.1.and.strg_(1:1).eq.'?') goto 223
+C>>>>    if(long_.eq.1.and.strg_(1:1).eq.'.') goto 223
+         if(type_.eq.'null')          goto 223
+         if(type_.eq.'numb')          goto 223
+         call tbxxwarn( ' Numb type violated  '//dname(i))
+223      if(nitem.le.0)               goto 224
+         idata=idata+1
+         if(dtype(i).eq.'null') dtype(i)=type_
+         if(dtype(i).eq.'numb' .and.
+     *     (type_.eq.'char'.or.type_.eq.'text')) dtype(i)='char'
+224      if(nname.eq.ndata)           goto 230
+         ndata=ndata+1
+         if(iloop(ndata).gt.1)        goto 225
+         krecd=irecd
+         kchar=jchar-long_-1
+         if(quote_.ne.' ') then
+           kchar=kchar-1
+           if (quote_(2:3).ne.'  ') kchar=kchar-2
+         end if
+225      continue
+         if(dtype(ndata).eq.'    ') dtype(ndata)=type_
+         drecd(ndata)=krecd
+         dchar(ndata)=kchar
+         if (depth_.gt.0) then
+CDBG     print *,' Setting bracket start at ',
+CDBG *     'char: ', posbrkstk(1)-1, 'rec: ',srecd
+         dchar(ndata) = posbrkstk(1)-1
+         drecd(ndata) = srecd
+
+         end if
+         if(nloop(ndata).gt.0)        goto 230
+         nloop(ndata)=0
+         iloop(ndata)=long_
+         if (depth_.gt.0) iloop(ndata) = 1
+C
+C....... Skip text lines if present
+C
+230      if(type_.ne.'text')           goto 250
+CDBG     print *,' text field detected at 230 '
+         if(nloop(ndata).eq.0.and.depth_.eq.0) dchar(ndata)=0
+         if(nloop(ndata).eq.0.and.depth_.eq.0) iloop(ndata)=long_
+240      call getstr
+         if(type_.eq.'fini') call tbxxerr(' Unexpected end of data')
+         if (type_.ne.'text'.or..not.text_) then
+           if (depth_.eq.0)            goto 200
+           goto 260
+         endif
+         goto 240
+C
+C....... Skip bracketed construct if present
+C
+250      if(depth_.eq.0)           goto 200
+         
+260      call getstr
+         if(depth_.eq.0) goto 200
+         if(type_.eq.'fini') call tbxxerr(' Unexpected end of data')
+         if(type_.eq.'text') goto 240
+         goto 260
+C
+C....... This is a data name; store name and loop parameters
+C
+270      call tbxxclc(temp,ltemp,strg_(1:long_),long_)
+         k=0
+         if(dictfl.ne.'yes' .and. ndict.gt.0) then
+           tbxxrslt = tbxxoldd(temp(1:ltemp),k)
+           if(k.ne.0) then
+             if(alias_ .and. aroot(k).ne.0) then
+               temp=dicnam(aroot(k))
+               ltemp = lastnb(temp)
+             endif
+           endif
+         endif
+         pnname=nname
+         call hash_store(temp(1:ltemp),
+     *   dname,dchain,NUMBLOCK,nname,dhash,
+     *     NUMHASH,j)
+CDBG     if(dictfl.eq.'no ')
+CDBG *     print *,' ***>>>>> data_ name: ',temp(1:ltemp)
+         if(j.eq.pnname+1) then
+           dtag(j)=strg_(1:long_)
+           if(k.ne.0) dtag(j)=dictag(k)
+           trecd(j)=irecd
+           tchar(j)=jchar-long_
+           if(quote_.ne.' '.and.quote_.ne.';') 
+     *       tchar(j)=jchar-long_-1
+           itpos=0
+           do ipp=1,tchar(j)
+             itpos=itpos+1
+             if(buffer(ipp:ipp).eq.tab) itpos=((itpos+7)/8)*8
+           enddo
+           xchar(j)=itpos
+         endif
+         if(j.eq.0)
+     *     call tbxxerr(' Number of data names > NUMBLOCK')
+         if(k.ne.0) then
+           ltemp = lastnb(dicnam(k))
+           temp(1:ltemp) = dicnam(k)(1:ltemp)
+         endif
+         if(j.ne.pnname+1) then
+           call tbxxwarn(' Duplicate data item '//
+     *     temp(1:ltemp))
+           goto 200
+         endif
+         dtype(nname)=' '
+         dxtyp(nname)=' '
+         cindex(nname)=0
+         ddict(nname)=0
+         ctemp(1:6)='(none)'
+         lctemp=6
+C
+         if(dictfl.eq.'yes' .or. vcheck.eq.'no ') goto 290
+         j=k
+         if(j.ne.0) then
+           ddict(nname)=j
+           cindex(nname)=dcindex(j)
+           dxtyp(nname)=dicxtyp(j)
+           dtype(nname)=dictyp(j)
+           if(vcheck.eq.'no ')          goto 280
+           if(dictyp(j).eq.'numb') then
+             dtype(nname)='test'
+           endif
+           if(cindex(nname).ne.0) then
+             lctemp=lastnb(dcname(cindex(nname)))
+             ctemp(1:lctemp)=dcname(cindex(nname))(1:lctemp)
+             goto 290
+           endif
+           goto  280
+         endif
+         call tbxxwarn(' Data name '//
+     *               temp(1:ltemp)
+     *               //' not in dictionary!')
+280      call tbxxcat(temp(1:ltemp),ctemp,lctemp)
+         if (ctemp(1:lctemp).eq.' '.or.
+     *     ('_'//ctemp(1:lctemp).eq.temp(1:ltemp))) then
+           ctemp = '(none)'
+           lctemp= 6
+           if (ndcname.ne.0.and.vcheck.eq.'yes')
+     *       call tbxxwarn(' No category defined for '
+     *       //temp(1:ltemp))
+         else
+           call hash_find(ctemp(1:lctemp),
+     *       dcname,dcchain,NUMDICT,ndcname,dchash,NUMHASH,j)
+           if(j.ne.0) then
+             cindex(nname) = j
+           else
+             ipj=ncname
+             call hash_store(ctemp(1:lctemp),
+     *         cname,cchain,NUMBLOCK,ncname,chash,NUMHASH,j)
+             if (j.eq.0)
+     *         call tbxxerr(' Number of categories > NUMBLOCK ')
+             cindex(nname) = -j
+             if (ndcname.gt.0.and.j.eq.ipj+1.and.vcheck.eq.'yes'
+     *         .and.catchk.eq.'yes')
+     *         call tbxxwarn(' Category '//
+     *         ctemp(1:lctemp)//' first implicitly defined in cif ')
+           endif
+         endif
+C
+290      lloop(nname)=0
+         nloop(nname)=0
+         iloop(nname)=0
+         if (nitem.eq.0) fcatnum=cindex(nname)
+         if(.not.loop_)               goto 200
+         nitem=nitem+1
+         if(nitem.gt.NUMITEM)
+     *     call tbxxerr(' Items per loop packet > NUMITEM')
+         nloop(nname)=loopct
+         iloop(nname)=nitem
+         if (fcatnum.ne.cindex(nname)) then
+           temp = '(none)'
+           if (fcatnum.gt.0) temp=dcname(fcatnum)
+           if (fcatnum.lt.0) temp=cname(-fcatnum)
+           ltemp = lastnb(temp)
+           if (ctemp(1:lctemp).ne.temp(1:ltemp)
+     *     .and.catchk.eq.'yes')
+     *     call tbxxwarn (' Heterogeneous categories in loop '//
+     *     ctemp(1:lctemp)//' vs '//
+     *     temp(1:ltemp))
+           fcatnum=cindex(nname)
+         endif
+         goto 200
+300      continue
+C
+C....... Are names checked against dictionary?
+C
+         if(dictfl.eq.'yes')          goto 500
+         if(vcheck.eq.'no '.or.ndict.eq.0) goto 500
+         do i=1,nname
+           if(dtype(i).eq.'test') dtype(i)='numb'
+         enddo
+
+C
+C        prepare for category and parent checks
+C
+         if ((catchk.eq.'yes'.or.parchk.eq.'yes')
+     *      .and. ndict.gt.0) then
+         do i = 1,ndict
+           ixcat(i) = .false.
+         enddo
+C
+C        make a pass marking all used tags and their aliases
+C
+         do i = 1,nname
+           icc=cindex(i)
+           idd=ddict(i)
+           if(icc.ne.0.and.idd.ne.0) then
+             icc = aroot(idd)
+310          ixcat(icc) = .true.
+             icc = alias(icc)
+             if (icc.ne.0) goto 310
+           endif
+         enddo
+         endif
+C
+C        check for category keys
+C
+C
+C
+C        now make a pass making certain the keys are
+C        used
+C
+         if(catchk.eq.'yes' .and. ndict.gt.0) then
+         do i = 1,nname
+           idd=cindex(i)
+           if (idd.gt.0) then
+             icc=ccatkey(idd)
+             if(icc.ne.0) then
+             if(aroot(icc).ne.0) icc=aroot(icc)
+320          if(icc.ne.0) then
+               if(.not.ixcat(icc)) then
+                 jj = irecd
+                 irecd = drecd(i)
+                 if (catkey(icc)) then
+                   call tbxxwarn(' Category key '//
+     *               dictag(icc)(1:lastnb(dictag(icc)))//
+     *               ' not given for '//
+     *               dcname(idd)(1:lastnb(dcname(idd))))
+                 else
+                   call tbxxwarn(' Mandatory item '//
+     *               dictag(icc)(1:lastnb(dictag(icc)))//
+     *               ' not given for '//
+     *               dcname(idd)(1:lastnb(dcname(idd))))
+                 endif
+                 ixcat(icc) = .true.
+                 irecd = jj
+               endif
+               icc = keychain(icc)
+               if(icc.ne.0) go to 320
+             endif
+             endif
+           endif
+         enddo
+         endif
+C
+C        check for parents of tags that are used
+C
+         if(parchk.eq.'yes' .and. ndict.gt.0) then
+         do i = 1,nname
+           if (ddict(i).ne.0) then
+             if (dpindex(ddict(i)).ne.ddict(i)) then
+               if (.not.ixcat(dpindex(ddict(i)))) then
+                 call tbxxwarn(' Parent '//
+     *             dicnam(dpindex(ddict(i)))
+     *             (1:lastnb(dicnam(dpindex(ddict(i)))))//
+     *             ' of '//
+     *             dname(i)(1:lastnb(dname(i))) //
+     *             ' not given')
+               endif
+             endif
+           endif
+         enddo
+         endif
+
+C
+C....... End of data block; tidy up loop storage
+C
+500      lrecd=irecd-1
+         if(type_.eq.'save'.and.long_.lt.6) then
+           itpos=jchar-long_
+           if(tabx_) then
+           itpos=0
+           do ipp=1,jchar-long_
+             itpos=itpos+1
+             if(buffer(ipp:ipp).eq.tab) itpos=((itpos+7)/8)*8
+           enddo
+           endif
+           posval_=itpos
+         endif
+         irecd=isrecd
+         jchar=isjchr
+         lastch=islast
+         recn_=irecd
+         buffer(1:1)=' '
+         if(lastch.gt.0)buffer(1:min(MAXBUF,lastch))=isbuf(1:lastch)
+         jrecd=irecd
+         loop_=.false.
+         loopct=0
+         if(ndata.ne.nname) call tbxxerr(' Syntax construction error')
+C
+Cdbg     WRITE(6,'(a)')
+Cdbg *   ' data name                       type recd char loop leng'
+Cdbg     WRITE(6,'(a,1x,a,4i5)') (dname(i),dtype(i),drecd(i),dchar(i),
+Cdbg *              nloop(i),iloop(i),i=1,nname)
+Cdbg     WRITE(6,'(3i5)') (i,loopni(i),loopnp(i),i=1,loopct)
+C
+         return
+         end
+C
+C
+C
+C
+C
+C >>>>>> Check dictionary for data name validation
+C
+         function dtype_(name,type)
+C
+         logical    dtype_, tbxxoldd
+         include   'ciftbx.sys'
+         integer    nln, ii
+         character  name*(*),temp*(NUMCHAR),
+     *              type*4
+C
+         character*4 map_type(19),map_to(19),mapped
+         data map_type
+     *   /'floa','int ','yyyy','symo','ucha','ucod','name','idna',
+     *    'any ','code','line','ulin','atco','fax ','phon','emai',
+     *    'real','inte','coun'/
+         data map_to
+     *   /'numb','numb','char','char','char','char','char','char',
+     *    'char','char','char','char','char','char','char','char',
+     *    'numb','numb','numb'/
+
+C
+         type = ' '
+         dtype_ = .false.
+         nln = min(len(name),len(temp))
+         call tbxxnlc(temp(1:nln),name)
+         if (ndict.eq.0) go to 200
+         tbxxrslt = tbxxoldd(temp(1:nln),xdchk)
+         if(xdchk.eq.0) go to 200
+         mapped = dictyp(xdchk)(1:4)
+         do ii = 1,19
+           if (dictyp(xdchk)(1:4).eq.map_type(ii)) mapped = map_to(ii)
+         enddo
+         if (mapped.ne.'char'.and.mapped.ne.'numb'
+     *     .and.mapped.ne.'null'.and.mapped.ne.'text') then
+           call tbxxwarn(' Item type '
+     *        //dictyp(xdchk)(1:max(1,lastnb(dictyp(xdchk))))//
+     *       ' for item '//
+     *       name(1:max(1,lastnb(name)))//' not recognized ')
+           mapped = 'char'
+         endif
+         type = mapped
+         dtype_ = .true.
+200      continue
+         return
+         end
+C
+C
+C
+C
+C
+C
+C >>>>>> Get the attributes of data item associated with data name
+C
+         function test_(temp)
+C
+         logical   test_
+         include   'ciftbx.sys'
+         character  temp*(*),name*(NUMCHAR)
+         character*4 otype
+         integer lname
+         character  otestf*3
+C
+         otestf=testfl
+         otype = type_
+         testfl='yes'
+         test_ = .false.
+         call tbxxclc(name,lname,temp,len(temp))
+CDBG     print *,' Entering test_ ',name(1:lname)
+         if (depth_.eq.0) go to 100
+         if (name(1:1).ne.' '.and.name(1:1).ne.char(0).and.
+     *     name(1:lname).ne.nametb(1:lnametb))     goto 120
+         call getstr
+         test_=.true.
+         if (type_.eq.'null') test_=.false.
+         if (otype.eq.'text' .and. (.not. text_) .and.long_.eq.0) then
+           quote_=' '
+           textfl = 'no'
+           type_ = 'null'
+           test_ = .false.
+           goto 200
+         end if
+         posval_ = jchar-long_
+         posend_ = jchar-1
+         if (long_.gt.0) then
+            if (type_.eq.'numb') then
+               call ctonum
+               if(posdec_.gt.0) posdec_=posval_+posdec_-1
+               jchar = posend_
+            else 
+              if (quote_.eq.' ') then
+                 if (long_.eq.1.and.strg_(1:1).eq.'?') type_='null'
+                 if (long_.eq.1.and.strg_(1:1).eq.'.') type_='null'
+              end if
+            end if
+         end if
+         goto 200
+
+         
+100      test_=.true.
+         if(otestf.eq.'no ' .or. type_.eq.' ')  goto 120
+         if(name(1:lname).eq.nametb(1:lnametb))   goto 200
+120      call tbxxgitm(name(1:lname))
+200      list_ =loopnl
+         if(type_.eq.'null') test_=.false.
+         if(type_.ne.'null'.and.type_.ne.'char'.and.
+     *     type_.ne.'text'.and.type_.ne.'numb') type_='char'
+CDBG     print *,' leaving test_ ', type_, depth_, strg_(1:long_)
+         return
+         end
+
+C
+C
+C
+C
+C
+C >>>>>> Set or Reference a bookmark
+C
+         function bkmrk_(mark)
+C
+         logical   bkmrk_
+         include   'ciftbx.sys'
+C
+         integer   mark,ii,nitem
+         character*4 flag
+         bkmrk_=.true.
+         if(mark.eq.0) then
+           do ii=1,MAXBOOK
+             if(ibkmrk(1,ii).lt.0)      goto 100
+           enddo
+           bkmrk_=.false.
+           call tbxxwarn(' More than MAXBOOK bookmarks requested')
+           return
+100        mark=ii
+           ibkmrk(1,ii)=iname
+           ibkmrk(2,ii)=irecd
+           ibkmrk(3,ii)=jchar
+           if(iname.gt.0) then
+             ibkmrk(2,ii) = trecd(iname)
+             ibkmrk(3,ii) = tchar(iname)
+           endif
+           ibkmrk(4,ii)=0
+           if(iname.gt.0) then
+             if(nloop(iname).ne.0.and.
+     *         loopnl.eq.nloop(iname).and.loopct.ne.0) then
+               nitem=loopni(nloop(iname))
+               ibkmrk(2,ii)=looprd(1)
+               ibkmrk(3,ii)=max(0,loopch(1)-1)
+               ibkmrk(4,ii)=loopct
+             endif
+           endif
+           ibkmrk(5,ii) = depth_
+           ibkmrk(6,ii) = index_
+         else
+           if(ibkmrk(1,mark).lt.0) then
+             bkmrk_=.false.
+             return
+           endif
+           iname=ibkmrk(1,mark)
+           irecd=ibkmrk(2,mark)
+           loopct=ibkmrk(4,mark)
+           loop_=.false.
+           text_=.false.
+           textfl = 'no '
+           loopnl=-1
+           testfl='no '
+           if(iname.gt.0) then
+            if(nloop(iname).ne.0.and.loopct.ne.0) then
+               nitem=loopni(nloop(iname))
+               looprd(nitem+1)=ibkmrk(2,mark)
+               loopch(nitem+1)=ibkmrk(3,mark)
+               do ii = 1,nitem
+                 lloop(ii+iname-iloop(iname))=loopct-1
+               enddo
+               loopct=loopct-1
+               if(lloop(iname).gt.0) then
+                 loop_=.true.
+                 loopnl=nloop(iname)
+               endif
+             endif
+           endif
+           jchar=MAXBUF
+           if(irecd.gt.0) then
+             irecd=irecd-1
+             call getlin(flag)
+             jchar=ibkmrk(3,mark)
+           endif
+           depth_=0
+           index_=0
+           if (ibkmrk(5,mark).gt.0) then
+200           call getstr
+              if (depth_ .lt. 1) then
+                call tbxxwarn(
+     *          ' Bookmark for list, array, tuple or table corrupted')
+                go to 210
+              end if
+              if(ibkmrk(5,mark).ne.depth_
+     *          .or. ibkmrk(6,mark).ne.index_ ) go to 200
+           endif
+210        ibkmrk(1,mark)=-1
+           mark=0
+         endif
+         return
+         end
+C
+C
+C
+C
+C
+C
+C >>>>>> Find the location of the requested item in the CIF
+C        The argument "name" may be a data item name, blank
+C        for the next such item.  The argument "type" may be
+C        blank for unrestricted acceptance of any non-comment
+C        string (use cmnt_ to see comments), including loop headers,
+C        "name" to accept only the name itself and "valu"
+C        to accept only the value, or "head" to position to the
+C        head of the CIF.  Except when the "head" is requested,
+C        the position is left after the data item provided.
+C
+         function find_(name,type,strg)
+C
+         logical   find_
+         include   'ciftbx.sys'
+         character  name*(*),type*(*),strg*(*),flag*4
+         character  jjbuf*(MAXBUF)
+         integer    jjchar,jjrecd,jjlast,jjlrec,jjjrec,jjdepth,jindex
+C
+CDBG     print *,' Entering find ', name, type
+         find_  = .false.
+         strg   = ' '
+         long_  = 0
+         jjchar = jchar
+         jjrecd = lrecd
+         jjlast = lastch
+         jjlrec = lrecd
+         jjjrec = jrecd
+         jjdepth = depth_
+         jindex = index_
+         jjbuf  = ' '
+         if(lastch.gt.0) jjbuf(1:lastch)=buffer(1:lastch)
+         if(type.eq.'head') then
+           lrecd = min(nrecd,recend_)
+           irecd = max(0,recbeg_-1)
+           jchar=MAXBUF+1
+           depth_=0
+           call getlin(flag)
+           if(flag.eq.'fini')       goto 300
+           find_=.true.
+           lrecd=max(0,recbeg_-1)
+           return
+         endif
+         if(name.ne.' ') then
+           testfl='no '
+           call tbxxgitm(name)
+           if(iname.eq.0) goto 300
+           if(type.eq.'valu') then
+             list_=loopnl
+             strg=strg_(1:long_)
+             find_=.true.
+             return
+           endif
+           if(type.eq.'name'.or.loopnl.eq.0) then
+             irecd=trecd(iname)-1
+             call getlin(flag)
+             jchar=tchar(iname)
+             depth_=0
+             posnam_=jchar+1
+             call getstr
+             strg=strg_(1:long_)
+             recn_=irecd
+             find_=.true.
+             return
+           endif
+           if(type.eq.' ') then
+             irecd=loorec(loopnl)-1
+             call getlin(flag)
+             jchar=loopos(loopnl)
+             depth_=0
+             call getstr
+             posval_=loopos(loopnl)
+             if(tabx_) posval_=loopox(loopnl)
+             strg=strg_(1:long_)
+             recn_=irecd
+             find_=.true.
+             return
+           endif
+           call tbxxerr(' Call to find_ with invalid arguments')
+         endif
+         if(name.eq.' ') then
+           go to 200
+190        if (text_.or.depth_.gt.0) then
+              call getstr
+              if (type_.eq.'fini')  goto 300
+              if (type_.ne.'null')  goto 190  
+           end if     
+200        call getstr
+           if(type_.eq.'fini')      goto 300
+           if(type.ne.' '.and.
+     *      (type_.eq.'data'.or.type_.eq.'save'.or.
+     *      type_.eq.'glob'))   goto 300
+           if(type.eq.'name'.and.type_.ne.'name')  goto 190
+           if(type.eq.'valu'.and.
+     *       type_.ne.'numb'.and.type_.ne.'text'
+     *      .and.type_.ne.'char'.and.type_.ne.'null') goto 190
+           find_=.true.
+           strg=strg_(1:long_)
+           if(type_.eq.'name') then
+             posnam_=jchar-long_
+           else
+             posval_=jchar-long_
+             if(quote_.ne.' '.and.quote_.ne.';') 
+     *         posval_=posval_-1
+             if(quote_.eq.'''''''' .or.quote_.eq.'"""')
+     *         posval_=posval_-2
+           endif
+           recn_=irecd
+           return
+         endif
+
+C
+C        Search failed, restore pointers
+C
+300      irecd  = jjrecd
+         lastch = jjlast
+         lrecd  = jjlrec
+         jchar  = jjchar
+         depth_ = jjdepth
+         index_ = jindex
+
+         buffer(1:1) = ' '
+         if(lastch.gt.0)buffer(1:min(MAXBUF,lastch))=jjbuf(1:lastch)
+         jrecd  = jjjrec
+         if(jrecd.ne.irecd) jrecd=-1
+         recn_  = irecd
+C
+         return
+         end
+C
+C
+C
+C
+C
+C
+C >>>>>> Get the next data name in the data block
+C
+         function name_(temp)
+C
+         logical    name_
+         include   'ciftbx.sys'
+         character  temp*(*)
+C
+         name_=.false.
+         temp=' '
+         iname=iname+1
+         if(iname.gt.nname)  goto 100
+         name_=.true.
+         temp=dtag(iname)
+         if(ddict(iname).ne.0) temp=dictag(ddict(iname))
+100      return
+         end
+C
+C
+C
+C
+C
+C
+C >>>>>> Extract a number data item and its standard deviation
+C        This version return single precision numbers
+C
+         function numb_(temp,numb,sdev)
+C
+         logical    numb_
+         include   'ciftbx.sys'
+         character  temp*(*),name*(NUMCHAR)
+         integer    lname
+         real       numb,sdev
+
+CDBG     print *,'***>>> Entering numb_ for ', temp
+
+C
+         call tbxxclc(name,lname,temp,len(temp))
+         if(testfl.eq.'yes')    goto 100
+         if(depth_.eq.0)        goto 120
+         if(name(1:1).ne.' '.and.name(1:1).ne.char(0).and.
+     *     name(1:lname).ne.nametb(1:lnametb))     goto 120
+     
+         numb_ = .false.
+         call getstr
+         if (type_.ne.'numb') go to 200 
+         if (type_.eq.'numb') then
+            call ctonum
+            if(posdec_.gt.0) posdec_=posval_+posdec_-1
+            numb_ = .true.
+            if (depth_.gt.0) jchar=jchar-1
+         end if
+CDBG     print *,'***>>> In numb_ strg_ ', strg_(1:long_)
+         go to 200
+
+100      if(name(1:lname).eq.nametb(1:lnametb))   goto 150
+C
+120      call tbxxgitm(name(1:lname))
+C
+150      continue
+CDBG     print *,'***>>> In numb_ strg_ ', strg_(1:long_)
+         numb_=.false.
+         if(type_.ne.'numb') goto 200
+         numb_=.true.
+         numb =sngl(numbtb)
+         if(sdevtb.ge.0.0) sdev=sngl(sdevtb)
+C
+200      testfl='no '
+         return
+         end
+C
+C
+C
+C
+C
+C
+C >>>>>> Extract a number data item and its standard deviation
+C        This version returns double precision numbers
+C
+         function numd_(temp,numb,sdev)
+C
+         logical    numd_
+         include   'ciftbx.sys'
+         character  temp*(*),name*(NUMCHAR)
+         integer    lname
+         double precision numb,sdev
+CDBG     print *,'***>>> Entering numb_ for ', temp
+C
+         call tbxxclc(name,lname,temp,len(temp))
+         if(testfl.eq.'yes')    goto 100
+         if(depth_.eq.0)        goto 120
+         if(name(1:1).ne.' '.and.name(1:1).ne.char(0).and.
+     *     name(1:lname).ne.nametb(1:lnametb))     goto 120
+     
+         numd_ = .false.
+         call getstr
+         if (type_.ne.'numb') go to 200 
+         if (type_.eq.'numb') then
+            call ctonum
+            if(posdec_.gt.0) posdec_=posval_+posdec_-1
+            numd_ = .true.
+            if (depth_.gt.0) jchar=jchar-1
+         end if
+CDBG     print *,'***>>> In numd_ strg_ ', strg_(1:long_)
+         go to 200
+
+100      if(name(1:lname).eq.nametb(1:lnametb))   goto 150
+C
+120      call tbxxgitm(name(1:lname))
+C
+150      numd_=.false.
+CDBG     print *,'***>>> In numd_ strg_ ', strg_(1:long_)
+         if(type_.ne.'numb') goto 200
+         numd_=.true.
+         numb =numbtb
+         if(sdevtb.ge.0.0) sdev=sdevtb
+C
+200      testfl='no '
+         return
+         end
+C
+C
+C
+C
+C
+C
+C >>>>>> Extract a character data item.
+C
+         function char_(temp,strg)
+C
+         logical    char_, charnp_
+         include   'ciftbx.sys'
+         character  temp*(*), strg*(*)
+         integer    lstrg,nstrg
+
+         nstrg = len(strg)
+         char_ = charnp_(temp,strg,lstrg)
+
+         if (lstrg.lt.len(strg)) strg(lstrg+1:nstrg) = ' '
+         return
+         end
+
+C
+C
+C
+C
+C
+C
+C >>>>>> Extract a character data item, no padding.
+C
+         function charnp_(temp,strg,lstrg)
+C
+         logical    charnp_
+         include   'ciftbx.sys'
+         character  temp*(*),name*(NUMCHAR)
+         character  strg*(*),flag*4
+         integer    lstrg
+         character*1 slash
+         character*4 otype
+         integer    ltemp, lname, klow
+         integer    lastnb
+C
+         slash = rsolidus(1:1)
+         ltemp = lastnb(temp)
+         otype = type_
+         call tbxxclc(name,lname,temp,ltemp)
+         if(testfl.eq.'yes')    goto 100
+         if(.not.text_.and.depth_.eq.0)         goto 120
+         if(name(1:1).ne.' '.and.name(1:1).ne.char(0).and.
+     *     name(1:lname).ne.nametb(1:lnametb))     goto 120
+         charnp_=.false.
+         lstrg = 1
+         strg=' '
+         call getstr
+         if (type_.eq.'fini') goto 200
+         if (otype.eq.'text' .and. (.not. text_) .and.long_.eq.0) then
+           quote_=' '
+           textfl = 'no'
+           charnp_=.false.
+           type_ = 'null'
+           goto 200
+         end if
+         posval_ = jchar-long_
+         posend_ = jchar-1
+         if (long_.gt.0) then
+            strg=strg_(1:long_)
+            lstrg=long_
+            if (type_.eq.'numb') then
+               call ctonum
+               if(posdec_.gt.0) posdec_=posval_+posdec_-1
+            else 
+              if (quote_.eq.' ') then
+                 if (long_.eq.1.and.strg_(1:1).eq.'?') type_='null'
+                 if (long_.eq.1.and.strg_(1:1).eq.'.') type_='null'
+              end if
+            end if
+         end if
+         charnp_=.true.
+         goto 200
+C
+100      if(name(1:lname).eq.nametb(1:lnametb))     goto 150
+C
+120      quote_=' '
+         call tbxxgitm(name(1:lname))
+         text_=.false.
+         if(type_.eq.'null') then
+           charnp_=.false.
+           text_=.false.
+           textfl = 'no '
+           strg_=' '
+           long_=0
+           goto 200
+         endif
+C
+C        strg_(1:long_) loaded with item
+C
+150      charnp_=.true.
+         strg(1:1)=' '
+         lstrg = 1
+         if(long_.gt.0) then
+           strg=strg_(1:long_)
+           lstrg = long_
+         endif
+         if(type_.eq.'char' )   goto 200
+         charnp_=.false.
+         if(type_.ne.'text')   goto 200
+         charnp_=.true.
+         call getlin(flag)
+         jchar=MAXBUF+1
+         if(flag.eq.'fini')    goto 200
+         if(buffer(1:1).eq.';')then
+           jchar=2
+           textfl = 'no '
+           quote_=';'
+           goto 200
+         endif
+         irecd=irecd-1
+         text_=.true.
+         if (long_.gt.0) then
+         if (unfold_ .and. strg(long_:long_).eq.slash) then
+170        klow = long_
+           long_ = long_-1
+           call getlin(flag)
+           if(flag.eq.'fini')    goto 210
+           if(buffer(1:1).eq.';') then
+             jchar=2
+             textfl = 'no '
+           goto 210
+           endif
+           quote_=' '
+           jchar=lastch+1
+           long_=min(len(strg_),klow+max(1,lastch)-1)
+           strg_(klow:long_)=buffer(1:max(1,lastch))
+           strg(long_:long_)=' '
+           if(lastch.gt.0) then
+             long_=min(len(strg),klow+lastch-1)
+             if(long_.ge.klow) strg(klow:long_)=buffer(1:lastch)
+           endif
+           if( strg(long_:long_).eq.slash ) go to 170
+         endif
+         endif
+C
+200      testfl='no '
+         if(long_.eq.0) strg(1:1)=' '
+         lstrg = max(1,long_)
+CDBG     print *,' Leaving charnp_ text_, type_, quote_: ',
+CDBG *     charnp_,text_,type_,quote_
+CDBG     print *, ':>>>:'//strg_(1:lstrg)
+         if (type_.eq.'char' .and. quote_.eq.' ') then 
+           if (strg(1:lstrg).eq.'?'.or. strg(1:lstrg).eq.'.') 
+     *       type_='null'
+         end if
+         return
+C
+210      text_ = .false.
+         go to 200
+C
+         end
+C
+C
+C
+C
+C
+C >>>>>> Extract a comment or terminal delimiter field
+C        backing up to a prior delimiter, depth_ will not
+C        be changed even when crossing a terminal delimiter
+C
+         function cotdb_(strg,lstrg,istd,posstart,recstart)
+C
+         logical   cotdb_
+         logical   istd
+         integer   posstart,recstart
+         integer   lastnb
+         include  'ciftbx.sys'
+         character strg*(*),flag*4,c*1,
+     *     jjbuf*(MAXBUF)
+         integer   jjchar,jjrecd,jjlast,jjlrec,jjjrec
+         integer   lstrg
+         integer   ipp,itpos
+         integer   klow
+         character*1 slash
+C
+         jjchar = jchar
+         jjrecd = irecd
+         jjlast = lastch
+         jjlrec = lrecd
+         jjjrec = jrecd
+         jjbuf=' '
+         istd = .false.
+         slash = rsolidus(1:1)
+         if(lastch.gt.0)jjbuf(1:lastch)=buffer(1:lastch)
+         lrecd = nrecd
+         if (irecd.ne.recstart) then
+           irecd = recstart-1
+           call getlin(flag)
+           if(flag.eq.'fini') then
+             strg='fini'
+             jchar=MAXBUF+1
+             lstrg=4
+             cotdb_=.false.
+             posstart = jchar
+             recstart = irecd
+             go to 300
+           endif
+         end if
+         jchar = posstart
+         strg=' '
+         lstrg=0
+         cotdb_=.false.
+100      jchar=jchar+1
+         if (jchar.gt.jjchar.and.irecd.ge.jjrecd) go to 300
+         if(jchar.le.lastch)     goto 140
+C
+C....... Read a new line
+C
+         call getlin(flag)
+         if(flag.eq.'fini') then
+           cotdb_=.false.
+           posstart = jchar
+           recstart = irecd
+           strg='fini'
+           lstrg=4
+           go to 300
+         endif
+         jchar=0
+         strg=char(0)
+         lstrg=1
+         posnam_=0
+         quote_=' '
+         goto 220
+140      if(lastch.eq.1.and.buffer(1:1).eq.' ') go to 200
+C
+C....... Process this character in the line
+C
+         c=buffer(jchar:jchar)
+         if(c.eq.' ')       goto 100
+         if(c.eq.tab.and.(.not.tabx_)) goto 190
+         if(c.eq.tab)       goto 100
+         if(c.eq.'#')       goto 200
+         if(depth_.gt.0 .and.
+     *    ((c.eq.']'.and.rdbkt_)
+     *      .or.(c.eq.')'.and.rdprn_)
+     *      .or.(c.eq.'}'.and.rdbrc_))) go to 250
+         goto 300
+C
+C        For a tab, when not expanding to blanks, accept
+C        that single character as a comment
+C
+190      lstrg=1
+         strg=tab
+         posnam_=jchar
+         jchar=jchar+1
+         goto 220
+C
+C....... Accept the remainder of the line as a comment
+C
+200      lstrg=lastch-jchar
+         quote_=buffer(jchar:jchar)
+         itpos=jchar
+         if(tabx_) then
+           itpos=0
+           do ipp=1,jchar
+             itpos=itpos+1
+             if(buffer(ipp:ipp).eq.tab) itpos=((itpos+7)/8)*8
+           enddo
+         endif
+         posnam_=itpos
+         if(lstrg.gt.0) then
+           strg = buffer(jchar+1:lastch)
+         endif
+         if(lstrg.le.0) then
+           strg=' '
+           lstrg=1
+         endif
+         if (strg.eq.slash .and. unfold_) go to 390
+         jchar=MAXBUF+1
+220      cotdb_=.true.
+         posstart = jchar
+         recstart = irecd
+         go to 300
+         
+C
+C....... Accept the next character as a terminal delimiter
+C        in a bracketed construct
+C
+250      lstrg=1
+         quote_=' '
+         posval_=jchar
+         strg = buffer(jchar:jchar)
+         istd =.true.
+         cotdb_=.true.
+         posstart = jchar
+         recstart = irecd
+
+C
+C....... restore pointers and exit
+C
+300      irecd = jjrecd
+         lastch = jjlast
+         lrecd = jjlrec
+         jchar = jjchar
+         buffer(1:1)=' '
+         if(lastch.gt.0)buffer(1:min(MAXBUF,lastch))=jjbuf(1:lastch)
+         jrecd=jjjrec
+         if(jrecd.ne.irecd) jrecd=-1
+         recn_=irecd
+         return
+C
+C....... Got a comment with a folding flag
+C
+390      klow = 1
+         lrecd=jjlrec
+         cotdb_=.true.
+         strg(1:1)=' '
+400      jjchar = MAXBUF+1
+         lrecd = nrecd
+         if(bloc_.eq.' ') then
+           if(irecd.eq.0) jchar=MAXBUF
+         endif
+         lstrg=0
+         go to 420
+410      jchar=jchar+1
+         if(jchar.le.lastch) go to 450
+420      call getlin(flag)
+         jchar = 1
+         jjchar = 1
+         if(flag.eq.'fini') then
+           cotdb_=.false.
+           strg='fini'
+           jchar=MAXBUF+1
+           lstrg=lastnb(strg)
+           posstart = jchar
+           recstart = irecd
+           go to 300
+         endif
+         jchar=1
+450      if(lastch.eq.1.and.buffer(1:1).eq.' ') go to 400
+C
+C....... Process this character in the line
+C
+         c=buffer(jchar:jchar)
+         if(c.eq.' '.or.c.eq.tab)      goto 410
+         if(c.eq.'#')       goto 470
+         posstart = jchar
+         recstart = irecd
+         goto 300
+C
+C....... Accept the remainder of the line as part of the comment
+C
+470      lstrg=lastch-jchar
+         itpos=jchar
+         if(lastch.gt.jchar)
+     *      strg(klow:min(len(strg),klow+lastch-2)) =
+     *      buffer(jchar+1:lastch)
+         klow=lastnb(strg)
+         if (strg(klow:klow).eq.slash) then
+           strg(klow:klow)=' '
+           go to 400
+         endif
+         jchar=MAXBUF+1
+         lstrg = klow
+         lrecd=jjlrec
+         posstart = jchar
+         recstart = irecd
+         goto 300
+
+         end
+C
+C
+C
+C >>>>>> Extract a comment or terminal delimiter field.
+C
+         function cotd_(strg,istd)
+C
+         logical   cotd_
+         logical   istd
+         integer   lastnb
+         include  'ciftbx.sys'
+         character strg*(*),flag*4,c*1,
+     *     jjbuf*(MAXBUF)
+         integer   jjchar,jjrecd,jjlast,jjlrec,jjjrec
+         integer   ipp,itpos
+         integer   klow
+         character*1 slash
+C
+         jjchar = jchar
+         jjrecd = irecd
+         jjlast = lastch
+         jjlrec = lrecd
+         jjjrec = jrecd
+         jjbuf=' '
+         istd = .false.
+         slash = rsolidus(1:1)
+         if(lastch.gt.0)jjbuf(1:lastch)=buffer(1:lastch)
+         lrecd = nrecd
+         if(bloc_.eq.' ') then
+           if(irecd.eq.0) jchar=MAXBUF
+         endif
+         strg=' '
+         long_=0
+         cotd_=.false.
+         if (depth_.eq.0.and.jchar.gt.0) go to 105
+100      jchar=jchar+1
+105      if(jchar.le.lastch)     goto 140
+C
+C....... Read a new line
+C
+         call getlin(flag)
+         if(flag.eq.'fini') then
+           strg='fini'
+           jchar=MAXBUF+1
+           long_=4
+           cotd_=.false.
+           return
+         endif
+         jchar=0
+         strg=char(0)
+         long_=1
+         posnam_=0
+         quote_=' '
+         goto 220
+140      if(lastch.eq.1.and.buffer(1:1).eq.' ') go to 200
+C
+C....... Process this character in the line
+C
+         c=buffer(jchar:jchar)
+         if(c.eq.' ')       goto 100
+         if(c.eq.tab.and.(.not.tabx_)) goto 190
+         if(c.eq.tab)       goto 100
+         if(c.eq.'#')       goto 200
+         if(depth_.gt.0 .and.
+     *    ((c.eq.']'.and.rdbkt_)
+     *      .or.(c.eq.')'.and.rdprn_)
+     *      .or.(c.eq.'}'.and.rdbrc_))) go to 250
+         goto 300
+C
+C        For a tab, when not expanding to blanks, accept
+C        that single character as a comment
+C
+190      long_=1
+         strg=tab
+         posnam_=jchar
+         jchar=jchar+1
+         goto 220
+C
+C....... Accept the remainder of the line as a comment
+C
+200      long_=lastch-jchar
+         quote_=buffer(jchar:jchar)
+         itpos=jchar
+         if(tabx_) then
+           itpos=0
+           do ipp=1,jchar
+             itpos=itpos+1
+             if(buffer(ipp:ipp).eq.tab) itpos=((itpos+7)/8)*8
+           enddo
+         endif
+         posnam_=itpos
+         if(long_.gt.0) then
+           strg = buffer(jchar+1:lastch)
+         endif
+         if(long_.le.0) then
+           strg=' '
+           long_=1
+         endif
+         if (strg.eq.slash .and. unfold_) go to 390
+         jchar=MAXBUF+1
+220      lrecd=jjlrec
+         cotd_=.true.
+         return
+         
+C
+C....... Accept the next character as a terminal delimiter
+C        in a bracketed construct
+C
+250      long_=1
+         quote_=' '
+         depth_ = depth_-1
+         posval_=jchar
+         strg = buffer(jchar:jchar)
+         jchar=jchar+1
+         lrecd=jjlrec
+         istd =.true.
+         cotd_=.true.
+         return
+
+C
+C....... Found a non-comment field, restore pointers
+C
+300      irecd = jjrecd
+         lastch = jjlast
+         lrecd = jjlrec
+         jchar = jjchar
+         buffer(1:1)=' '
+         if(lastch.gt.0)buffer(1:min(MAXBUF,lastch))=jjbuf(1:lastch)
+         jrecd=jjjrec
+         if(jrecd.ne.irecd) jrecd=-1
+         recn_=irecd
+         return
+C
+C....... Got a comment with a folding flag
+C
+390      klow = 1
+         lrecd=jjlrec
+         cotd_=.true.
+         strg(1:1)=' '
+400      jjchar = MAXBUF+1
+         lrecd = nrecd
+         if(bloc_.eq.' ') then
+           if(irecd.eq.0) jchar=MAXBUF
+         endif
+         long_=0
+         go to 420
+410      jchar=jchar+1
+         if(jchar.le.lastch) go to 450
+420      call getlin(flag)
+         jchar = 1
+         jjchar = 1
+         if(flag.eq.'fini') then
+           strg='fini'
+           jchar=MAXBUF+1
+           long_=lastnb(strg)
+           return
+         endif
+         jchar=1
+450      if(lastch.eq.1.and.buffer(1:1).eq.' ') go to 400
+C
+C....... Process this character in the line
+C
+         c=buffer(jchar:jchar)
+         if(c.eq.' '.or.c.eq.tab)      goto 410
+         if(c.eq.'#')       goto 470
+         goto 500
+C
+C....... Accept the remainder of the line as part of the comment
+C
+470      long_=lastch-jchar
+         itpos=jchar
+         if(lastch.gt.jchar)
+     *      strg(klow:min(len(strg),klow+lastch-2)) =
+     *      buffer(jchar+1:lastch)
+         klow=lastnb(strg)
+         if (strg(klow:klow).eq.slash) then
+           strg(klow:klow)=' '
+           go to 400
+         endif
+         jchar=MAXBUF+1
+         long_ = klow
+         lrecd=jjlrec
+         return
+C
+C....... Found a non-comment field, restore pointers, but return the
+C        comment found so far
+C
+500      jchar = jjchar
+         return
+
+         end
+C         
+         subroutine tbxxbtab
+         include  'ciftbx.sys'
+         if (jchar.gt.0 .and. jchar.le.lastch) then
+           if (buffer(jchar:jchar).eq.tab
+     *      .and..not.tabx_) 
+     *      jchar=jchar-1
+         end if
+         return
+         end
+C         
+         subroutine tbxxetab
+         include  'ciftbx.sys'
+         if (jchar.gt.1 .and. jchar.le.lastch) then
+           if (buffer(jchar-1:jchar-1).eq.tab
+     *      .and..not.tabx_) then
+            jchar = jchar-1 
+            buffer(jchar:jchar) = ' '
+            end if
+         end if
+         return
+         end
+C
+C
+C
+C
+C
+C
+C >>>>>> Extract a comment field.
+C
+         function cmnt_(strg)
+C
+         logical   cmnt_
+         integer   lastnb
+         include  'ciftbx.sys'
+         character strg*(*),flag*4,c*1,
+     *     jjbuf*(MAXBUF)
+         integer   jjchar,jjrecd,jjlast,jjlrec,jjjrec
+         integer   ipp,itpos
+         integer   klow
+         character*1 slash
+C
+         jjchar = jchar
+         jjrecd = irecd
+         jjlast = lastch
+         jjlrec = lrecd
+         jjjrec = jrecd
+         jjbuf=' '
+         slash = rsolidus(1:1)
+         if(lastch.gt.0)jjbuf(1:lastch)=buffer(1:lastch)
+         lrecd = nrecd
+         if(bloc_.eq.' ') then
+           if(irecd.eq.0) jchar=MAXBUF
+         endif
+         strg=' '
+         long_=0
+         cmnt_=.false.
+         if (depth_.eq.0 .and. jchar.gt.0) go to 105
+100      jchar=jchar+1
+105      if(jchar.le.lastch)     goto 140
+C
+C....... Read a new line
+C
+         call getlin(flag)
+         if(flag.eq.'fini') then
+           strg='fini'
+           jchar=MAXBUF+1
+           long_=4
+           cmnt_=.false.
+           return
+         endif
+         jchar=0
+         strg=char(0)
+         long_=1
+         posnam_=0
+         quote_=' '
+         goto 220
+140      if(lastch.eq.1.and.buffer(1:1).eq.' ') go to 200
+C
+C....... Process this character in the line
+C
+         c=buffer(jchar:jchar)
+         if(c.eq.' ')       goto 100
+         if(c.eq.tab.and.(.not.tabx_)) goto 190
+         if(c.eq.tab)       goto 100
+         if(c.eq.'#')       goto 200
+         goto 300
+C
+C        For a tab, when not expanding to blanks, accept
+C        that single character as a comment
+C
+190      long_=1
+         strg=tab
+         posnam_=jchar
+         jchar=jchar+1
+         goto 220
+C
+C....... Accept the remainder of the line as a comment
+C
+200      long_=lastch-jchar
+         quote_=buffer(jchar:jchar)
+         itpos=jchar
+         if(tabx_) then
+           itpos=0
+           do ipp=1,jchar
+             itpos=itpos+1
+             if(buffer(ipp:ipp).eq.tab) itpos=((itpos+7)/8)*8
+           enddo
+         endif
+         posnam_=itpos
+         if(long_.gt.0) then
+           strg = buffer(jchar+1:lastch)
+         endif
+         if(long_.le.0) then
+           strg=' '
+           long_=1
+         endif
+         if (strg.eq.slash .and. unfold_) go to 390
+         jchar=MAXBUF+1
+220      lrecd=jjlrec
+         cmnt_=.true.
+         return
+C
+C....... Found a non-comment field, restore pointers
+C
+300      irecd = jjrecd
+         lastch = jjlast
+         lrecd = jjlrec
+         jchar = jjchar
+         buffer(1:1)=' '
+         if(lastch.gt.0)buffer(1:min(MAXBUF,lastch))=jjbuf(1:lastch)
+         jrecd=jjjrec
+         if(jrecd.ne.irecd) jrecd=-1
+         recn_=irecd
+         return
+C
+C....... Got a comment with a folding flag
+C
+390      klow = 1
+         lrecd=jjlrec
+         cmnt_=.true.
+         strg(1:1)=' '
+400      jjchar = MAXBUF+1
+         lrecd = nrecd
+         if(bloc_.eq.' ') then
+           if(irecd.eq.0) jchar=MAXBUF
+         endif
+         long_=0
+         go to 420
+410      jchar=jchar+1
+         if(jchar.le.lastch) go to 450
+420      call getlin(flag)
+         jchar = 1
+         jjchar = 1
+         if(flag.eq.'fini') then
+           strg='fini'
+           jchar=MAXBUF+1
+           long_=lastnb(strg)
+           return
+         endif
+         jchar=1
+450      if(lastch.eq.1.and.buffer(1:1).eq.' ') go to 400
+C
+C....... Process this character in the line
+C
+         c=buffer(jchar:jchar)
+         if(c.eq.' '.or.c.eq.tab)      goto 410
+         if(c.eq.'#')       goto 470
+         goto 500
+C
+C....... Accept the remainder of the line as part of the comment
+C
+470      long_=lastch-jchar
+         itpos=jchar
+         if(lastch.gt.jchar)
+     *      strg(klow:min(len(strg),klow+lastch-2)) =
+     *      buffer(jchar+1:lastch)
+         klow=lastnb(strg)
+         if (strg(klow:klow).eq.slash) then
+           strg(klow:klow)=' '
+           go to 400
+         endif
+         jchar=MAXBUF+1
+         long_ = klow
+         lrecd=jjlrec
+         return
+C
+C....... Found a non-comment field, restore pointers, but return the
+C        comment found so far
+C
+500      jchar = jjchar
+         return
+
+         end
+C
+C
+C
+C
+C
+C
+C >>>>>> Return the delimiter prior to the most recently
+C        examined value
+C
+         function delim_(depth,delim,posdlm,recdlm)
+C
+         logical   delim_
+         integer   depth
+         integer   posdlm
+         integer   recdlm
+         character*(*) delim
+
+         include  'ciftbx.sys'
+         delim = ' '
+         delim_ = .false.
+         posdlm = 0
+         if (depth .ge.0 .and. depth .le.depth_) then
+           delim = delimstack(depth+1)
+           delim_ = .true.
+           posdlm = posdlmstk(depth+1)
+           recdlm = recdlmstk(depth+1)
+         end if
+
+         return
+
+         end
+C
+C
+C
+C
+C
+C >>>>> Convert name string to lower case
+C
+         function tbxxlocs(name)
+C
+         include     'ciftbx.sys'
+         character    tbxxlocs*(MAXBUF)
+         character    temp*(MAXBUF),name*(*)
+         character    low*26,cap*26,c*1
+         integer      i,j,kln
+         integer      lastnb
+         data  cap /'ABCDEFGHIJKLMNOPQRSTUVWXYZ'/
+         data  low /'abcdefghijklmnopqrstuvwxyz'/
+C
+         temp=name
+         kln = lastnb(name)
+         do 100 i=1,kln
+         c=temp(i:i)
+         j=index(cap,c)
+         if(j.ne.0) temp(i:i)=low(j:j)
+100      continue
+         tbxxlocs=temp
+         return
+         end
+C
+C
+C
+C
+C
+C >>>>> Convert name string to lower case as subroutine
+C
+         subroutine tbxxnlc(loname, name)
+C
+         include     'ciftbx.sys'
+         character    temp*(MAXBUF),loname*(*),name*(*)
+         character    low*26,cap*26,c*1
+         integer      i,j,kln
+         integer      lolen,olen
+         integer      lastnb
+         data  cap /'ABCDEFGHIJKLMNOPQRSTUVWXYZ'/
+         data  low /'abcdefghijklmnopqrstuvwxyz'/
+C
+         lolen = len(loname)
+         olen = len(name)
+         kln = min(MAXBUF,lolen,olen)
+         kln = lastnb(name(1:kln))
+         temp(1:kln)=name(1:kln)
+         do 100 i=1,kln
+         c=temp(i:i)
+         j=index(cap,c)
+         if(j.ne.0) temp(i:i)=low(j:j)
+100      continue
+         loname=temp(1:kln)
+         return
+         end
+C
+C
+C
+C
+C
+C >>>>> Convert counted name string to lower case as subroutine
+C       with counts
+C
+         subroutine tbxxclc(loname, lloname, name, lname)
+C
+         include     'ciftbx.sys'
+         character    temp*(MAXBUF),loname*(*),name*(*)
+         integer      lloname, lname
+         character    low*26,cap*26,c*1
+         integer      i,j,kln
+         integer      lolen,olen
+         integer      lastnb
+         data  cap /'ABCDEFGHIJKLMNOPQRSTUVWXYZ'/
+         data  low /'abcdefghijklmnopqrstuvwxyz'/
+C
+         lolen = len(loname)
+         olen = min(len(name),lname)
+         kln = min(MAXBUF,lolen,olen)
+         kln = lastnb(name(1:kln))
+         temp(1:kln)=name(1:kln)
+         do 100 i=1,kln
+         c=temp(i:i)
+         j=index(cap,c)
+         if(j.ne.0) temp(i:i)=low(j:j)
+100      continue
+         loname(1:kln)=temp(1:kln)
+         lloname = kln
+         return
+         end
+
+C
+C
+C
+C
+C
+C >>>>> Convert name string to upper case
+C
+         function tbxxupcs(name)
+C
+         include     'ciftbx.sys'
+         character    tbxxupcs*(MAXBUF)
+         character    temp*(MAXBUF),name*(*)
+         character    low*26,cap*26,c*1
+         integer      i,j,kln
+         integer      lastnb
+         data  cap /'ABCDEFGHIJKLMNOPQRSTUVWXYZ'/
+         data  low /'abcdefghijklmnopqrstuvwxyz'/
+C
+         temp=name
+         kln = lastnb(name)
+         do 100 i=1,kln
+         c=temp(i:i)
+         j=index(low,c)
+         if(j.ne.0) temp(i:i)=cap(j:j)
+100      continue
+         tbxxupcs=temp
+         return
+         end
+C
+C
+C
+C
+C
+C >>>>> Convert name string to upper case as subroutine
+C
+         subroutine tbxxnupc(upname, name)
+C
+         include     'ciftbx.sys'
+         character    temp*(MAXBUF),upname*(*),name*(*)
+         character    low*26,cap*26,c*1
+         integer      i,j,kln
+         integer      olen,uplen
+         integer      lastnb
+         data  cap /'ABCDEFGHIJKLMNOPQRSTUVWXYZ'/
+         data  low /'abcdefghijklmnopqrstuvwxyz'/
+C
+         uplen = len(upname)
+         olen = len(name)
+         kln = min(MAXBUF,uplen,olen)
+         kln = lastnb(name(1:kln))
+         temp(1:kln)=name(1:kln)
+         do 100 i=1,kln
+         c=temp(i:i)
+         j=index(low,c)
+         if(j.ne.0) temp(i:i)=cap(j:j)
+100      continue
+         upname=temp(1:kln)
+         return
+         end
+
+C
+C
+      END MODULE CIF2CIF
+      
       MODULE CIFtbx
       
       CONTAINS
