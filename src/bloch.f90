@@ -712,7 +712,7 @@ SUBROUTINE StrongBeamsDetermination(IErr)
   ! Determine RBSMaxDeviationPara
   !----------------------------------------------------------------------------
 
-  IF (IMinWeakBeams.GT.0) THEN
+  IF (IDebugFLAG.LT.11) THEN
 
      IStrongBeamList = 0
 
@@ -736,7 +736,7 @@ SUBROUTINE StrongBeamsDetermination(IErr)
      ENDDO
 
 
-  ELSE IF (IMinWeakBeams.EQ.0) THEN
+  ELSE IF (IDebugFLAG.GT.11) THEN
 
      IStrongBeamList = 0
      
