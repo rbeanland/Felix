@@ -28,11 +28,11 @@ exe=${1:felixsim}
 
 # submission directory - point to what you want the PBS working directory to be 
 # Doesn't need to exist
-submitdir=/work/e370/e370/ajmh1001/Archer_test_script
+submitdir=$HOME/SUBMIT/ #rest here
 
 # tmp directory to run felix in
 # Doesn't need to exist
-bashtmpdir=/work/e370/e370/ajmh1001/RUNS/Archer_test_script_temp
+bashtmpdir=$HOME/TEMP/ #rest here
 
 
 #Input Arguments
@@ -151,7 +151,7 @@ rm -rf $inpfile
 
 touch $inpfile
 
-echo "# Input file for felixrefine version :VERSION: Build :BUILD:"            > $inpfile
+echo "# Input file for felixrefine version :VERSION: Build :BUILD:"            >> $inpfile
 echo "# ------------------------------------"                                  >> $inpfile
 echo ""                                                                        >> $inpfile
 echo "# ------------------------------------"                                  >> $inpfile
@@ -159,7 +159,7 @@ echo "# felixrefine input"                                                     >
 echo ""                                                                        >> $inpfile
 echo "# control flags"                                                         >> $inpfile
 echo "IWriteFLAG                = 1"                                           >> $inpfile
-echo "IImageFLAG                = 012"                                           >> $inpfile
+echo "IImageFLAG                = 01"                                          >> $inpfile
 echo "IOutputFLAG               = 0"                                           >> $inpfile
 echo "IBinorTextFLAG            = 0"                                           >> $inpfile 
 echo "IScatterFactorMethodFLAG  = 0"                                           >> $inpfile
@@ -176,8 +176,8 @@ echo "# radius of the beam in pixels"                                          >
 echo "IPixelCount               = 64"                                          >> $inpfile
 echo ""                                                                        >> $inpfile
 echo "# beam selection criteria"                                               >> $inpfile
-echo "IMinReflectionPool        = 300"                                        >> $inpfile
-echo "IMinStrongBeams           = 50"                                         >> $inpfile
+echo "IMinReflectionPool        = 300"                                         >> $inpfile
+echo "IMinStrongBeams           = 50"                                          >> $inpfile
 echo "IMinWeakBeams             = 5"                                           >> $inpfile
 echo "RBSBMax                   = 0.1"                                         >> $inpfile
 echo "RBSPMax                   = 0.1"                                         >> $inpfile
@@ -206,13 +206,13 @@ echo ""                                                                        >
 echo "RInitialThickness        = 1000.0"                                       >> $inpfile
 echo "RFinalThickness          = 1000.0"                                       >> $inpfile
 echo "RDeltaThickness          = 10.0"                                         >> $inpfile
-echo "IReflectOut              = 1"                                           >> $inpfile
+echo "IReflectOut              = 7"                                            >> $inpfile
 echo ""                                                                        >> $inpfile
 echo "# felixrefine Input"                                                     >> $inpfile
 echo ""                                                                        >> $inpfile
 echo "#Refinement Specific Flags"                                              >> $inpfile
-echo "IRefineModeFLAG          = 0"                                           >> $inpfile
-echo "IWeightingFLAG           = 0"                                           >> $inpfile
+echo "IRefineModeFLAG          = 0"                                            >> $inpfile
+echo "IWeightingFLAG           = 0"                                            >> $inpfile
 echo ""                                                                        >> $inpfile
 echo "# Debye Waller Factor Iteration"                                         >> $inpfile
 echo ""                                                                        >> $inpfile
@@ -223,7 +223,7 @@ echo "IElementsforDWFchange = {0}"                                             >
 echo ""                                                                        >> $inpfile
 echo "# Ug Iteration"                                                          >> $inpfile
 echo  ""                                                                       >> $inpfile 
-echo "INoofUgs                  = 10"                                           >> $inpfile
+echo "INoofUgs                  = 10"                                          >> $inpfile
 echo "RLowerBoundUgChange       = 50.0"                                        >> $inpfile
 echo "RUpperBoundUgChange       = 50.0"                                        >> $inpfile
 echo "RDeltaUgChange            = 50.0"                                        >> $inpfile
