@@ -6,29 +6,29 @@ hklfile=felix.hkl
 
 #Name of Job
 #-----------
-Job_Name= FS_StrongBeams_KCL_HOLZindref #job name here (FS... or FR...)
+Job_Name=FS_StrongBeams_KCL_HOLZindref #job name here (FS... or FR...)
 
 
 #Directory Input
 #---------------
 #input file directory - point to where all input file(s) are located (at the very least the .sca file)
 # NEEDS TO EXIST
-inputfiledir=$HOME/FelixStrong/Felix/KCL #rest here
+inputfiledir=$HOME/Felix_Strong/Felix/KCL #rest here
 
 # point this to where the felixsim/refine executable is
 # NEEDS TO EXIST
-binarydir=$HOME/FelixStrong/Felix/src #rest here
+binarydir=$HOME/Felix_Strong/Felix/src #rest here
 
 # settings for executable
 exe=felixsim
 
 # submission directory - point to what you want the PBS working directory to be 
 # Doesn't need to exist
-submitdir=$HOME/SUBMIT/ #rest here
+submitdir=$HOME/SUBMIT/KCL_StrongBeams_ver2 #rest here
 
 # tmp directory to run felix in
 # Doesn't need to exist
-bashtmpdir=$HOME/TEMP/ #rest here
+bashtmpdir=$HOME/TEMP/KCL_StrongBeams #rest here
 
 
 #Input Arguments
@@ -96,7 +96,7 @@ cat > ${job_dir}/${job_file} << EOD
 #PBS -j oe
 
 #       The jobname
-#PBS -N ${exe}_${JobId}
+#PBS -N FelixSim_${StrongBeamsind}
 
 #       The total number of parallel tasks for your job.
 #PBS -l nodes=${nodes}:ppn=1
@@ -124,19 +124,7 @@ tmpdir=$HOME/RUNS/`basename ${job_file} .sh`
 [ -d \${tmpdir} ] || mkdir -p \${tmpdir}
 
 # copy the needed binaries
-cp ${binarydir}/${exe} \${tmpdir}/
-cp \${basedir}/${ciffile} \${tmpdir}/
-cp ${scadir}/${scafile} \${tmpdir}/
-cp ${scadir}/${hklfile} \${tmpdir}/
-
-# copy any input images if present; only needed for felixrefine
-echo $InputImages
-for imgno in {1..$InputImages}
-do
- echo \${imgno}
- imgfile=felix.00\${imgno}.img
- cp ${scadir}/\${imgfile} \${tmpdir}/
-done
+cp ${inputfiledir}/* \${tmpdir}/
 
 # construct the input files
 
@@ -158,7 +146,7 @@ echo "# felixrefine input"                                                     >
 echo ""                                                                        >> $inpfile
 echo "# control flags"                                                         >> $inpfile
 echo "IWriteFLAG                = 1"                                           >> $inpfile
-echo "IImageFLAG                = 01"                                          >> $inpfile
+echo "IImageFLAG                = 0"                                          >> $inpfile
 echo "IOutputFLAG               = 0"                                           >> $inpfile
 echo "IBinorTextFLAG            = 0"                                           >> $inpfile 
 echo "IScatterFactorMethodFLAG  = 0"                                           >> $inpfile
@@ -175,7 +163,7 @@ echo "# radius of the beam in pixels"                                          >
 echo "IPixelCount               = 128"                                          >> $inpfile
 echo ""                                                                        >> $inpfile
 echo "# beam selection criteria"                                               >> $inpfile
-echo "IMinReflectionPool        = 1000"                                         >> $inpfile
+echo "IMinReflectionPool        = 100"                                         >> $inpfile
 echo "IMinStrongBeams           = ${StrongBeamsind}"                                          >> $inpfile
 echo "IMinWeakBeams             = 0"                                           >> $inpfile
 echo "RBSBMax                   = 0.1"                                         >> $inpfile
@@ -205,7 +193,7 @@ echo ""                                                                        >
 echo "RInitialThickness        = 1000.0"                                       >> $inpfile
 echo "RFinalThickness          = 1000.0"                                       >> $inpfile
 echo "RDeltaThickness          = 10.0"                                         >> $inpfile
-echo "IReflectOut              = 49"                                            >> $inpfile
+echo "IReflectOut              = 20"                                            >> $inpfile
 echo ""                                                                        >> $inpfile
   
 cat $inpfile
