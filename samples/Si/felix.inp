@@ -22,7 +22,7 @@ IPixelCount               = 64
 # beam selection criteria
 IMinReflectionPool        = 30
 IMinStrongBeams           = 15
-IMinWeakBeams             = 0
+IMinWeakBeams             = 5
 RBSBMax                   = 0.1
 RBSPMax                   = 0.1
 
