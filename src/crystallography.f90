@@ -83,6 +83,9 @@ SUBROUTINE CrystalLatticeVectorDetermination(IErr)
           TWO*COS(RAlpha)*COS(RBeta)*COS(RGamma))
   ENDIF
 
+!!$  If Rhombohedral unit cell, check to see what axes are used, three cases: Primitive,PseudoCubic
+!!$  and rhombohedral axes. See International tables, chapter 2, figure 2.13.1. Selection Rules in 
+!!$  Diffractionpatterndefinitions based on this check  
   IF(IDiffractionFLAG.EQ.0) THEN
      
      RTTest = DOT_PRODUCT(RaVecO/DOT_PRODUCT(RaVecO,RaVecO),RbVecO/DOT_PRODUCT(RbVecO,RbVecO))*&
@@ -90,12 +93,16 @@ SUBROUTINE CrystalLatticeVectorDetermination(IErr)
           DOT_PRODUCT(RcVecO/DOT_PRODUCT(RcVecO,RcVecO),RaVecO/DOT_PRODUCT(RaVecO,RaVecO))
      
      IF(SCAN(SSpaceGroupName,'rR').NE.0) THEN
-        IF(ABS(RTTest).LT.TINY) THEN
+        IF((ABS(RTTest).LT.TINY).AND.(RAlpha.EQ.RBeta.AND.RAlpha.EQ.RGamma)) THEN
+           SSpaceGroupName=TRIM(ADJUSTL('P'))
+           CALL Message("CrystalLatticeVectorDetermination",IMust,IErr, &
+                MessageString = "Crystal is in Primitive setting (Rhombohedral Pseudocubic axes)")
+        ELSE IF(ABS(RTTest).LT.TINY) THEN
            SSpaceGroupName = TRIM(ADJUSTL("V"))
            CALL Message("CrystalLatticeVectorDetermination",IMust,IErr, &
                 MessageString = "Warning: Crystal is either Obverse or Reverse,")
            CALL Message("CrystalLatticeVectorDetermination",IMust,IErr, &
-                MessageString = "Selection Rules are not Currently In place to determine the difference,")
+                MessageString = "Selection Rules are not currently In place to determine the difference,")
            CALL Message("CrystalLatticeVectorDetermination",IMust,IErr, &
                 MessageString = "felix will assume the crystal is Obverse")
         ELSE
