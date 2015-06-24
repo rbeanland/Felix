@@ -38,14 +38,16 @@
 
 #module swap oldmodules minerva-2.0
 #module load goolf-1.7.10
+#module load iomkl-13.1.3
 
-F90 = mpif90
-FC = gfortran -ffixed-form -std=legacy
-F90FLAGS = -fbounds-check -fno-range-check -fimplicit-none # debug
-#F90FLAGS = -m64 -fno-range-check -pg -ffree-line-length-none # profiling
-F77FLAGS = -fbounds-check -fno-range-check # debug
+F90 = mpif90 
+FC = ifort
 
-LIBFLAGS= \
+F90FLAGS =  # debug
+F90FLAGS = -profile-functions # -m64 -fno-range-check -ffree-line-length-none # profiling,intel
+F77FLAGS =-profile-functions# -fbounds-check -fno-range-check  # profiling,intel
+
+LIBFLAGS= -lmkl\
 -L/csc/minerva/software/gompi/1.7.10/ScaLAPACK/2.0.2-openblas-0.2.8-lapack-3.4.2/lib \
 -L/csc/minerva/software/gompi/1.7.10/OpenBLAS/0.2.8-lapack-3.4.2/lib \
 -lopenblas \
