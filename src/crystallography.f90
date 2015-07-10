@@ -91,7 +91,9 @@ SUBROUTINE CrystalLatticeVectorDetermination(IErr)
      RTTest = DOT_PRODUCT(RaVecO/DOT_PRODUCT(RaVecO,RaVecO),RbVecO/DOT_PRODUCT(RbVecO,RbVecO))*&
           DOT_PRODUCT(RbVecO/DOT_PRODUCT(RbVecO,RbVecO),RcVecO/DOT_PRODUCT(RcVecO,RcVecO))*&
           DOT_PRODUCT(RcVecO/DOT_PRODUCT(RcVecO,RcVecO),RaVecO/DOT_PRODUCT(RaVecO,RaVecO))
-     
+
+     PRINT*,"RTTest = ", RTTest
+
      IF(SCAN(SSpaceGroupName,'rR').NE.0) THEN
         IF((ABS(RTTest).LT.TINY).AND.(RAlpha.EQ.RBeta.AND.RAlpha.EQ.RGamma)) THEN
            SSpaceGroupName=TRIM(ADJUSTL('P'))

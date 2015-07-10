@@ -186,23 +186,6 @@ SUBROUTINE BlochCoefficientCalculation(IYPixelIndex,IXPixelIndex,IPixelNumber,IF
      RETURN
   ENDIF
 
-  ALLOCATE( &
-       CBeamTranspose(nReflections,nBeams), &
-       STAT=IErr)
-  IF( IErr.NE.0 ) THEN
-     PRINT*,"BlochCoefficientCalculation(", my_rank, ") error ", IErr, &
-          " in ALLOCATE() of DYNAMIC variables CBeamTranspose"
-     RETURN
-  ENDIF
-
-  ALLOCATE( &
-       CUgMatPartial(nReflections,nBeams), &
-       STAT=IErr)
-  IF( IErr.NE.0 ) THEN
-     PRINT*,"BlochCoefficientCalculation(", my_rank, ") error ", IErr, &
-          " in ALLOCATE() of DYNAMIC variables CUgMatPartial"
-     RETURN
-  ENDIF
 
   ALLOCATE( &
        CInvertedEigenVectors(nBeams,nBeams), &
