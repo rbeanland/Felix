@@ -30,7 +30,7 @@
 !  You should have received a copy of the GNU General Public License
 !  along with felixsim.  If not, see <http://www.gnu.org/licenses/>.
 !
-!
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 SUBROUTINE StructureFactorSetup(IErr)
 
@@ -144,15 +144,6 @@ SUBROUTINE StructureFactorSetup(IErr)
      PRINT*,"felixsim(", my_rank, ") error ", IErr, &
           " in Deallocation of RgMatMag"
 
-     RETURN
-  ENDIF
-  
-  DEALLOCATE( &
-       RScattFactors,&
-       STAT=IErr)
-  IF( IErr.NE.0 ) THEN
-     PRINT*,"felixsim(", my_rank, ") error ", IErr, &
-          " in DEALLOCATE() "
      RETURN
   ENDIF
 
