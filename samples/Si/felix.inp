@@ -12,7 +12,6 @@ IMaskFLAG                 = 0
 IZolzFLAG                 = 0
 IAbsorbFLAG               = 1
 IAnisoDebyeWallerFlag     = 0
-IBeamConvergenceFLAG      = 1
 IPseudoCubicFLAG          = 0
 IXDirectionFLAG           = 1
 
