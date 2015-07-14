@@ -1053,6 +1053,7 @@ SUBROUTINE BmaxAndPmaxFitting (IErr)
   IWeakBeamIndex=0
   IWeakBeamList = 0
   
+!!$ Determine final weak beam list
   DO knd=1,nReflections
      IFound = 0
      IF( (ABS(RDevPara(knd)) .GT. RBSMaxDeviationPara).AND. &
