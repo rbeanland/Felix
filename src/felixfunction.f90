@@ -667,8 +667,6 @@ SUBROUTINE CalculateFigureofMeritandDetermineThickness(IThicknessCountFinal,IErr
        RSimulatedImageForPhaseCorrelation,RExperimentalImage
   REAL(RKIND) :: &
        RCrossCorrelationOld,RIndependentCrossCorrelation,RThickness,PhaseCorrelate,Normalised2DCrossCorrelation
-!!$  REAL(RKIND),DIMENSION(IReflectOut,IThicknessCount,IPixelTotal) :: &
-!!$       RSimulatedImages
   REAL(RKIND),DIMENSION(IReflectOut) :: &
        RReflectionCrossCorrelations
   REAL(RKIND) :: &
@@ -733,10 +731,16 @@ SUBROUTINE CalculateFigureofMeritandDetermineThickness(IThicknessCountFinal,IErr
            
         CASE(0) ! Phase Correlation
            
+!!$           A Hann Window must be applied to the images to reduce edge effects
+           
+           CALL ApplyHannWindow(RSimulatedImageForPhaseCorrelation,IErr)
+           CALL ApplyHannWindow(RExperimentalImage,IErr)
+           
            RIndependentCrossCorrelation = &
                 ONE-& ! So Perfect Correlation = 0 not 1
                 PhaseCorrelate(&
-                RSimulatedImageForPhaseCorrelation,RExperimentalImage,&
+                RSimulatedImageForPhaseCorrelation,&
+                RExperimentalImage,&
                 IErr,2*IPixelCount,2*IPixelCount)
            
         CASE(1) ! Residual Sum of Squares (Non functional)

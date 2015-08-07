@@ -282,3 +282,82 @@ REAL(RKIND) FUNCTION Normalised2DCrossCorrelation(RImage1,RImage2,IImageSize,ITo
        RImage2,STAT=IErr)
 
 END FUNCTION Normalised2DCrossCorrelation
+
+SUBROUTINE ApplyHannWindow(RImage,IErr)
+
+!!$%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!!$%
+!!$% Application of a Hann window to reduce edge effects (resulting in periodicity) during FFT
+!!$%
+!!$% Window = 0.5*(1-COS(2*PI*n/N))
+!!$%
+!!$%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+  USE MyNumbers
+  
+  USE CConst; USE IConst
+  USE IPara; USE RPara
+  USE IChannels
+  USE MPI
+  USE MyMPI
+
+  IMPLICIT NONE
+
+  INTEGER(IKIND) :: &
+       IErr,ind,jnd
+  REAL(RKIND),DIMENSION(2*IPixelCount,2*IPixelCount) :: &
+       RImage,RHannWindow
+  REAL(RKIND) :: &
+       RRelativePositioninImageX,RRelativePositioninImageY
+  
+  DO ind = 1,(2*IPixelCount)
+
+     RRelativePositioninImageX = (REAL(ind,RKIND)-ONE)/(REAL(2*IPixelCount,RKIND)-ONE)
+
+     DO jnd = 1,(2*IPixelCount)
+
+        RRelativePositioninImageY = (REAL(jnd,RKIND)-ONE)/(REAL(2*IPixelCount,RKIND)-ONE)
+
+        RHannWindow(jnd,ind) = &
+             (HALF*(ONE-COS(TWOPI*RRelativePositioninImageX)))* &
+             (HALF*(ONE-COS(TWOPI*RRelativePositioninImageY)))
+
+     END DO
+
+  END DO
+
+  RImage = RImage*RHannWindow
+
+END SUBROUTINE ApplyHannWindow
+
+!!$SUBROUTINE DetermineImageOffset(RImage1,RImage2,IErr)
+!!$
+!!$  USE MyNumbers
+!!$  
+!!$  USE CConst; USE IConst
+!!$  USE IPara; USE RPara
+!!$  USE IChannels
+!!$  USE MPI
+!!$  USE MyMPI
+!!$
+!!$  IMPLICIT NONE
+!!$
+!!$  INTEGER(IKIND) :: &
+!!$       IErr
+!!$  REAL(RKIND),DIMENSION(2*IPixelCount,2*IPixelCount) :: &
+!!$       RImage1,RImage2
+!!$
+!!$  DO ind = 1,IScanRange
+!!$
+!!$     DO jnd = i,IScanRange
+!!$
+!!$        Normalised2DCrossCorrelation
+!!$
+!!$     END DO
+!!$  
+!!$  END DO
+!!$
+!!$
+!!$
+!!$
+!!$END SUBROUTINE DetermineImageOffset
