@@ -470,6 +470,10 @@ SUBROUTINE ReadInpFile( IErr )
      ILine= ILine+1
      READ(IChInp,15,ERR=20,END=30) RExitCriteria
      CALL Message ("ReadInpFile",IInfo,IErr,MessageVariable ="RExitCriteria",RVariable = RExitCriteria)
+
+     ILine= ILine+1
+     READ(IChInp,10,ERR=20,END=30) IEstimatedImageOffset
+     CALL Message ("ReadInpFile",IInfo,IErr,MessageVariable ="IEstimatedImageOffset",IVariable = IEstimatedImageOffset)
   END IF
 
 10 FORMAT(27X,I15.1)

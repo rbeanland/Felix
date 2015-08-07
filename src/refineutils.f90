@@ -126,7 +126,6 @@ REAL(RKIND) FUNCTION PhaseCorrelate(RImageSim,RImageExpiDummy,IErr,IXsizeIn,IYSi
   
 !!$  RCrossCorrelation = MAXVAL(RImageSimDummy)/(IX*IY)
   PhaseCorrelate = MAXVAL(RImageSimDummy)/(IX*IY)
-  IOffset = MAXLOC(RImageSimDummy)
   
   !PRINT*,RImageSimDummy(:2,:2)
 
@@ -229,7 +228,7 @@ REAL(RKIND) FUNCTION ResidualSumofSquares(RImage1,RImage2,IErr)
 
 END FUNCTION ResidualSumofSquares
 
-REAL(RKIND) FUNCTION Normalised2DCrossCorrelation(RImage1,RImage2,IImageSize,ITotalPixelsInImage,IErr)
+REAL(RKIND) FUNCTION RNormalised2DCrossCorrelation(RImage1,RImage2,IImageSize,IErr)
 
   USE MyNumbers
   
@@ -249,7 +248,8 @@ REAL(RKIND) FUNCTION Normalised2DCrossCorrelation(RImage1,RImage2,IImageSize,ITo
        RImage1,RImage2
   REAL(RKIND) :: &
        RImage1Mean,RImage2Mean,RImage1StandardDeviation,RImage2StandardDeviation,RPixelTotal
-    
+  
+  ITotalPixelsInImage = IImageSize(1)*IImageSize(2)
   RPixelTotal = REAL(ITotalPixelsInImage,RKIND)  
 
   RImage1Mean = SUM(RImage1)/RPixelTotal
@@ -260,13 +260,13 @@ REAL(RKIND) FUNCTION Normalised2DCrossCorrelation(RImage1,RImage2,IImageSize,ITo
   RImage2StandardDeviation = SQRT(SUM(((RImage2-RImage2Mean)**2) / &
        RPixelTotal))
   
-  Normalised2DCrossCorrelation = &
+  RNormalised2DCrossCorrelation = &
        (ONE/RPixelTotal) * &
        SUM( &
        ((RImage1-RImage1Mean)*(RImage2-RImage2Mean))/&
        (RImage1StandardDeviation*RImage2StandardDeviation))
 
-END FUNCTION Normalised2DCrossCorrelation
+END FUNCTION RNormalised2DCrossCorrelation
 
 SUBROUTINE ApplyHannWindow(RImage,IErr)
 
@@ -315,34 +315,134 @@ SUBROUTINE ApplyHannWindow(RImage,IErr)
 
 END SUBROUTINE ApplyHannWindow
 
-!!$SUBROUTINE DetermineImageOffset(RImage1,RImage2,IErr)
-!!$
-!!$  USE MyNumbers
-!!$  
-!!$  USE CConst; USE IConst
-!!$  USE IPara; USE RPara
-!!$  USE IChannels
-!!$  USE MPI
-!!$  USE MyMPI
-!!$
-!!$  IMPLICIT NONE
-!!$
-!!$  INTEGER(IKIND) :: &
-!!$       IErr
-!!$  REAL(RKIND),DIMENSION(2*IPixelCount,2*IPixelCount) :: &
-!!$       RImage1,RImage2
-!!$
-!!$  DO ind = 1,IScanRange
-!!$
-!!$     DO jnd = i,IScanRange
-!!$
-!!$        Normalised2DCrossCorrelation
-!!$
-!!$     END DO
-!!$  
-!!$  END DO
-!!$
-!!$
-!!$
-!!$
-!!$END SUBROUTINE DetermineImageOffset
+SUBROUTINE DetermineImageOffset(RImage,RTemplate,IImageOffset,IErr)
+
+  USE MyNumbers
+  
+  USE CConst; USE IConst
+  USE IPara; USE RPara
+  USE IChannels
+  USE MPI
+  USE MyMPI
+
+  IMPLICIT NONE
+
+  INTEGER(IKIND) :: &
+       IErr,IXOffset,IYOffset,&
+       IScanRange,ind,jnd
+  INTEGER(IKIND),DIMENSION(2) :: &
+       IImageSize,IImageBoundsX,IImageBoundsY,ITemplateBoundsX,ITemplateBoundsY
+  INTEGER(IKIND),DIMENSION(2),INTENT(OUT) :: &
+       IImageOffset
+  REAL(RKIND),DIMENSION(2*IPixelCount,2*IPixelCount) :: &
+       RImage,RTemplate
+  REAL(RKIND) :: &
+       RCurrentCorrelation,RBestCorrelation,RNormalised2DCrossCorrelation
+  
+  RBestCorrelation = ZERO
+  IScanRange = 2*IEstimatedImageOffset+1 !Scan IEstimatedImageOffset pixels either side of current alignment
+ 
+!!$  Template Moves,Image Stays Put
+!!$  Template = Simulated Image
+!!$  Image = Experimental Image
+
+  DO ind = 1,IScanRange
+
+     IXOffset = ind-(IScanRange+1)/2 !IF IScanRange = 3 then scan is for offsets of -1,0 and 1 etc...
+     
+     IImageSize(1) = 2*IPixelCount-ABS(IXOffset) ! Image Size reduces by Offset
+
+     CALL CalculateNewImageandTemplateBounds1D(IImageBoundsX,ITemplateBoundsX,IXOffset,IErr)
+
+     DO jnd = 1,IScanRange        
+
+        IYOffset = jnd-(IScanRange+1)/2
+
+        IImageSize(2) = 2*IPixelCount-ABS(IYOffset) 
+
+        CALL CalculateNewImageandTemplateBounds1D(IImageBoundsY,ITemplateBoundsY,IXOffset,IErr)
+        
+        RCurrentCorrelation = RNormalised2DCrossCorrelation(&
+             RImage(IImageBoundsY(1):IImageBoundsY(2),IImageBoundsX(1):IImageBoundsX(2)),&
+             RTemplate(ITemplateBoundsX(1):ITemplateBoundsX(2),ITemplateBoundsY(1):ITemplateBoundsY(2)),&
+             IImageSize,IErr)
+
+        IF(RCurrentCorrelation.GT.RBestCorrelation) THEN
+           RCurrentCorrelation = RBestCorrelation
+           IImageOffset(1) = IXOffset
+           IImageOffset(2) = IYOffset
+        END IF
+
+     END DO
+  
+  END DO
+
+  PRINT*,"Offset is",IImageOffset
+
+
+END SUBROUTINE DetermineImageOffset
+
+SUBROUTINE CalculateNewImageandTemplateBounds1D(IImageBounds,ITemplateBounds,IOffset,IErr)
+
+  USE MyNumbers
+  
+  USE CConst; USE IConst
+  USE IPara; USE RPara
+  USE IChannels
+  USE MPI
+  USE MyMPI
+
+  IMPLICIT NONE
+
+  INTEGER(IKIND) :: &
+       IErr,IOffset
+  INTEGER(IKIND),DIMENSION(2),INTENT(OUT) :: &
+       IImageBounds,ITemplateBounds
+  
+  IF (IOffset.LE.0) THEN !Negative Offset means Template moves left
+     
+     IImageBounds(1) = 1
+     IImageBounds(2) = 2*IPixelCount+IOffset
+     ITemplateBounds(1) = 1-IOffset !At IOffset = 0 images are aligned
+     ITemplateBounds(2) = 2*IPixelCount
+     
+  ELSE ! Positive Offset means Template moves right
+     
+     IImageBounds(1) = IOffset + 1
+     IImageBounds(2) = 2*IPixelCount
+     ITemplateBounds(1) = 1 !At IOffset = 0 images are aligned
+     ITemplateBounds(2) = 2*IPixelCount-IOffset
+     
+  END IF
+
+END SUBROUTINE CalculateNewImageandTemplateBounds1D
+
+SUBROUTINE CalculateNewImageandTemplateBounds2D(IImageBoundsXandY,ITemplateBoundsXandY,IOffset,IErr)
+
+  USE MyNumbers
+  
+  USE CConst; USE IConst
+  USE IPara; USE RPara
+  USE IChannels
+  USE MPI
+  USE MyMPI
+
+  IMPLICIT NONE
+
+  INTEGER(IKIND) :: &
+       IErr
+  INTEGER(IKIND),DIMENSION(2),INTENT(IN) :: &
+       IOffset
+!!$  IOffset is a two element array containing the Y and X offsets (row/column)  
+  INTEGER(IKIND),DIMENSION(2,2),INTENT(OUT) :: &
+       IImageBoundsXandY,ITemplateBoundsXandY
+!!$  Bounds arrays contain lower and upper bounds for Y and X (row/column)
+!!$  (Ylower,YUpper)
+!!$  (XLower,XUpper)
+
+  CALL CalculateNewImageandTemplateBounds1D(&
+       IImageBoundsXandY(1,:),ITemplateBoundsXandY(1,:),IOffset(1),IErr) !Y offset
+  CALL CalculateNewImageandTemplateBounds1D(&
+       IImageBoundsXandY(2,:),ITemplateBoundsXandY(2,:),IOffset(2),IErr) !X offset
+
+END SUBROUTINE CalculateNewImageandTemplateBounds2D

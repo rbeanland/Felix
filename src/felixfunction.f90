@@ -661,12 +661,16 @@ SUBROUTINE CalculateFigureofMeritandDetermineThickness(IThicknessCountFinal,IErr
        ind,jnd,knd,IErr,ICountedPixels,IThickness,hnd
   INTEGER(IKIND),DIMENSION(IReflectOut) :: &
        IThicknessByReflection
+  INTEGER(IKIND),DIMENSION(2) :: &
+       IImageOffset,IImageSize
+  INTEGER(IKIND),DIMENSION(2,2) :: &
+       IExperimentalImageBoundsXandY,ISimulatedImageBoundsXandY
   INTEGER(IKIND),INTENT(OUT) :: &
        IThicknessCountFinal
   REAL(RKIND),DIMENSION(2*IPixelCount,2*IPixelCount) :: &
        RSimulatedImageForPhaseCorrelation,RExperimentalImage
   REAL(RKIND) :: &
-       RCrossCorrelationOld,RIndependentCrossCorrelation,RThickness,PhaseCorrelate,Normalised2DCrossCorrelation
+       RCrossCorrelationOld,RIndependentCrossCorrelation,RThickness,PhaseCorrelate,RNormalised2DCrossCorrelation
   REAL(RKIND),DIMENSION(IReflectOut) :: &
        RReflectionCrossCorrelations
   REAL(RKIND) :: &
@@ -750,11 +754,27 @@ SUBROUTINE CalculateFigureofMeritandDetermineThickness(IThicknessCountFinal,IErr
            
         CASE(2) ! Normalised Cross Correlation
 
+           IF(hnd.EQ.1) THEN !if this is the first image defined in the hkl file
+              CALL DetermineImageOffset(RExperimentalImage,RSimulatedImageForPhaseCorrelation,IImageOffset,IErr)
+           END IF
+
+           CALL CalculateNewImageandTemplateBounds2D(&
+                IExperimentalImageBoundsXandY,&
+                ISimulatedImageBoundsXandY,IImageOffset,IErr)
+
+           IImageSize(1) = 2*IPixelCount-ABS(IImageOffset(1))
+           IImageSize(2) = 2*IPixelCount-ABS(IImageOffset(2))
+           
            RIndependentCrossCorrelation = &
                 ONE-& ! So Perfect Correlation = 0 not 1
-                Normalised2DCrossCorrelation(&
-                RSimulatedImageForPhaseCorrelation,RExperimentalImage,&
-                (/2*IPixelCount, 2*IPixelCount/),IPixelTotal,IErr)
+                RNormalised2DCrossCorrelation(&
+                RSimulatedImageForPhaseCorrelation(& !Send Image Subset if images are misaligned 
+                ISimulatedImageBoundsXandY(1,1):ISimulatedImageBoundsXandY(1,2),&
+                ISimulatedImageBoundsXandY(2,1):ISimulatedImageBoundsXandY(2,2)),&
+                RExperimentalImage(& !Send Image Subset if images are misaligned !
+                IExperimentalImageBoundsXandY(1,1):IExperimentalImageBoundsXandY(1,2),&
+                IExperimentalImageBoundsXandY(2,1):IExperimentalImageBoundsXandY(2,2)),&
+                IImageSize,IErr)
            
         END SELECT
                 

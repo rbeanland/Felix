@@ -161,7 +161,8 @@ MODULE IPara
        IImageFLAG,IBeamConvergenceFLAG,  &
        IPseudoCubicFLAG,IXDirectionFLAG,IDevFLAG, &
        IRefineModeFLAG,ISoftwareMode,IHKLSelectFLAG,IPrint,IRefineSwitch,&
-       IWeightingFLAG,IContinueFLAG,ICorrelationFLAG,IImageProcessingFLAG
+       IWeightingFLAG,IContinueFLAG,ICorrelationFLAG,IImageProcessingFLAG,&
+       IEstimatedImageOffset
 
   !Minimum Reflections etc
   INTEGER(IKIND) :: &
@@ -257,9 +258,6 @@ MODULE IPara
 
   INTEGER(IKIND) :: &
        IFluxIterationSteps,IElements
-
-  INTEGER(IKIND), DIMENSION(2) :: &
-       IOffset
 
   INTEGER(IKIND), DIMENSION(:),ALLOCATABLE :: &
        IElementList
