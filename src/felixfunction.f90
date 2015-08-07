@@ -754,7 +754,7 @@ SUBROUTINE CalculateFigureofMeritandDetermineThickness(IThicknessCountFinal,IErr
                 ONE-& ! So Perfect Correlation = 0 not 1
                 Normalised2DCrossCorrelation(&
                 RSimulatedImageForPhaseCorrelation,RExperimentalImage,&
-                IErr)
+                (/2*IPixelCount, 2*IPixelCount/),IPixelTotal,IErr)
            
         END SELECT
                 
@@ -1287,7 +1287,7 @@ REAL(RKIND) FUNCTION RStandardError(RStandardDeviation,RMean,RFigureofMerit,IErr
   IMPLICIT NONE
 
   INTEGER(IKIND) :: &
-       IErr
+      IErr
   REAL(RKIND),INTENT(INOUT) :: &
        RStandardDeviation,RMean
   REAL(RKIND),INTENT(IN) :: &
