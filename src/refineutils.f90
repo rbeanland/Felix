@@ -338,6 +338,8 @@ SUBROUTINE DetermineImageOffset(RImage,RTemplate,IImageOffset,IErr)
        RImage,RTemplate
   REAL(RKIND) :: &
        RCurrentCorrelation,RBestCorrelation,RNormalised2DCrossCorrelation
+  REAL(RKIND),DIMENSION(2*IEstimatedImageOffset+1,2*IEstimatedImageOffset+1) :: &
+       RCorrelationMap
   
   RBestCorrelation = ZERO
   IScanRange = 2*IEstimatedImageOffset+1 !Scan IEstimatedImageOffset pixels either side of current alignment
@@ -360,15 +362,17 @@ SUBROUTINE DetermineImageOffset(RImage,RTemplate,IImageOffset,IErr)
 
         IImageSize(2) = 2*IPixelCount-ABS(IYOffset) 
 
-        CALL CalculateNewImageandTemplateBounds1D(IImageBoundsY,ITemplateBoundsY,IXOffset,IErr)
+        CALL CalculateNewImageandTemplateBounds1D(IImageBoundsY,ITemplateBoundsY,IYOffset,IErr)
         
         RCurrentCorrelation = RNormalised2DCrossCorrelation(&
              RImage(IImageBoundsY(1):IImageBoundsY(2),IImageBoundsX(1):IImageBoundsX(2)),&
              RTemplate(ITemplateBoundsX(1):ITemplateBoundsX(2),ITemplateBoundsY(1):ITemplateBoundsY(2)),&
              IImageSize,IErr)
 
+        RCorrelationMap(jnd,ind) = RCurrentCorrelation
+
         IF(RCurrentCorrelation.GT.RBestCorrelation) THEN
-           RCurrentCorrelation = RBestCorrelation
+           RBestCorrelation = RCurrentCorrelation
            IImageOffset(1) = IXOffset
            IImageOffset(2) = IYOffset
         END IF
@@ -376,9 +380,6 @@ SUBROUTINE DetermineImageOffset(RImage,RTemplate,IImageOffset,IErr)
      END DO
   
   END DO
-
-  PRINT*,"Offset is",IImageOffset
-
 
 END SUBROUTINE DetermineImageOffset
 
