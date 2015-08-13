@@ -40,7 +40,7 @@ SUBROUTINE DetermineAllowedMovements(ISpaceGrp,SWyckoffSymbol,RVector,IVector,IE
 
   USE MyNumbers
   USE WriteToScreen
-  
+
   USE CConst; USE IConst; USE RConst
   USE IPara; USE RPara; USE SPara; USE CPara
   USE BlochPara
@@ -102,9 +102,74 @@ SUBROUTINE DetermineAllowedMovements(ISpaceGrp,SWyckoffSymbol,RVector,IVector,IE
 !!$  CASE(9)
 !!$  CASE(10)
 !!$  CASE(11)
-!!$  CASE(12)
+  CASE(12)
+     SELECT CASE (SWyckoffSymbol)
+     CASE('a')
+        DO ind = 1,IVector
+           SELECT CASE (ind)
+           CASE(1)       
+              RVector(ind,:) = (/ZERO, ONE, ZERO/)
+           CASE(2)
+              RVector(ind,:) = (/ZERO, ZERO, ONE/)
+           END SELECT
+        END DO
+     CASE('b')
+        DO ind = 1,IVector
+           SELECT CASE (ind)
+           CASE(1)
+              RVector(ind,:) = (/ONE, ZERO, ZERO/)
+           CASE(2)
+              RVector(ind,:) = (/ZERO, ONE, ZERO/)
+           CASE(3)
+              RVector(ind,:) = (/ZERO, ZERO, ONE/)
+           END SELECT
+        END DO
+     CASE('c')
+     CASE('d')
+     CASE('e')
+     CASE('f')
+     CASE('g')
+     CASE('h')
+     CASE('i')
+     CASE('j')
+     CASE DEFAULT
+        PRINT*,"---------------------------------------"
+        PRINT*,"This Wyckoff Symbol for this space group is not yet implemented"
+        PRINT*,"You can correct this in symmetry.f90"
+        PRINT*,"---------------------------------------"     
+     END SELECT
 !!$  CASE(13)
-!!$  CASE(14)
+CASE(14)
+     SELECT CASE (SWyckoffSymbol)
+     CASE('a')
+        DO ind = 1,IVector
+           SELECT CASE (ind)
+           CASE(1)       
+              RVector(ind,:) = (/ZERO, ONE, ZERO/)
+           CASE(2)
+              RVector(ind,:) = (/ZERO, ZERO, ONE/)
+           END SELECT
+        END DO
+     CASE('b')
+        DO ind = 1,IVector
+           SELECT CASE (ind)
+           CASE(1)
+              RVector(ind,:) = (/ONE, ZERO, ZERO/)
+           CASE(2)
+              RVector(ind,:) = (/ZERO, ONE, ZERO/)
+           CASE(3)
+              RVector(ind,:) = (/ZERO, ZERO, ONE/)
+           END SELECT
+        END DO
+     CASE('c')
+     CASE('d')
+     CASE('e')
+     CASE DEFAULT
+        PRINT*,"---------------------------------------"
+        PRINT*,"This Wyckoff Symbol for this space group is not yet implemented"
+        PRINT*,"You can correct this in symmetry.f90"
+        PRINT*,"---------------------------------------"     
+     END SELECT
 !!$  CASE(15)
 !!$  CASE(16)
 !!$  CASE(17)
@@ -253,7 +318,43 @@ SUBROUTINE DetermineAllowedMovements(ISpaceGrp,SWyckoffSymbol,RVector,IVector,IE
 !!$  CASE(133)
 !!$  CASE(134)
 !!$  CASE(135)
-!!$  CASE(136)
+  CASE(136)
+     SELECT CASE (SWyckoffSymbol)
+     CASE('a')
+        DO ind = 1,IVector
+           SELECT CASE (ind)
+           CASE(1)       
+              RVector(ind,:) = (/ZERO, ONE, ZERO/)
+           CASE(2)
+              RVector(ind,:) = (/ZERO, ZERO, ONE/)
+           END SELECT
+        END DO
+     CASE('b')
+        DO ind = 1,IVector
+           SELECT CASE (ind)
+           CASE(1)
+              RVector(ind,:) = (/ONE, ZERO, ZERO/)
+           CASE(2)
+              RVector(ind,:) = (/ZERO, ONE, ZERO/)
+           CASE(3)
+              RVector(ind,:) = (/ZERO, ZERO, ONE/)
+           END SELECT
+        END DO
+     CASE('c')
+     CASE('d')
+     CASE('e')
+     CASE('f')
+     CASE('g')
+     CASE('h')
+     CASE('i')
+     CASE('j')
+     CASE('k')
+     CASE DEFAULT
+        PRINT*,"---------------------------------------"
+        PRINT*,"This Wyckoff Symbol for this space group is not yet implemented"
+        PRINT*,"You can correct this in symmetry.f90"
+        PRINT*,"---------------------------------------"     
+     END SELECT
 !!$  CASE(137)
 !!$  CASE(138)
 !!$  CASE(139)
@@ -362,7 +463,7 @@ SUBROUTINE CountAllowedMovements(ISpaceGrp,SWyckoffSymbol,IVectors,IErr)
 
   USE MyNumbers
   USE WriteToScreen
-  
+
   USE CConst; USE IConst; USE RConst
   USE IPara; USE RPara; USE SPara; USE CPara
   USE BlochPara
@@ -384,7 +485,7 @@ SUBROUTINE CountAllowedMovements(ISpaceGrp,SWyckoffSymbol,IVectors,IErr)
 
   !Tells user, entering CountAllowedMovements
   CALL Message("CountAllowedMovements",IMust,IErr)
-  
+
   SELECT CASE(ISpaceGrp)
   CASE(1)
      SELECT CASE (SWyckoffSymbol)
@@ -408,7 +509,42 @@ SUBROUTINE CountAllowedMovements(ISpaceGrp,SWyckoffSymbol,IVectors,IErr)
 !!$  CASE(9)
 !!$  CASE(10)
 !!$  CASE(11)
-!!$  CASE(12)
+  CASE(12)
+     SELECT CASE (SWyckoffSymbol)
+     CASE('a')
+        DO ind = 1,IVector
+           SELECT CASE (ind)
+           CASE(1)       
+              RVector(ind,:) = (/ZERO, ONE, ZERO/)
+           CASE(2)
+              RVector(ind,:) = (/ZERO, ZERO, ONE/)
+           END SELECT
+        END DO
+     CASE('b')
+        DO ind = 1,IVector
+           SELECT CASE (ind)
+           CASE(1)
+              RVector(ind,:) = (/ONE, ZERO, ZERO/)
+           CASE(2)
+              RVector(ind,:) = (/ZERO, ONE, ZERO/)
+           CASE(3)
+              RVector(ind,:) = (/ZERO, ZERO, ONE/)
+           END SELECT
+        END DO
+     CASE('c')
+     CASE('d')
+     CASE('e')
+     CASE('f')
+     CASE('g')
+     CASE('h')
+     CASE('i')
+     CASE('j')
+     CASE DEFAULT
+        PRINT*,"---------------------------------------"
+        PRINT*,"This Wyckoff Symbol for this space group is not yet implemented"
+        PRINT*,"You can correct this in symmetry.f90"
+        PRINT*,"---------------------------------------"     
+     END SELECT
 !!$  CASE(13)
 !!$  CASE(14)
 !!$  CASE(15)
@@ -543,7 +679,43 @@ SUBROUTINE CountAllowedMovements(ISpaceGrp,SWyckoffSymbol,IVectors,IErr)
 !!$  CASE(133)
 !!$  CASE(134)
 !!$  CASE(135)
-!!$  CASE(136)
+  CASE(136)
+     SELECT CASE (SWyckoffSymbol)
+     CASE('a')
+        DO ind = 1,IVector
+           SELECT CASE (ind)
+           CASE(1)       
+              RVector(ind,:) = (/ZERO, ONE, ZERO/)
+           CASE(2)
+              RVector(ind,:) = (/ZERO, ZERO, ONE/)
+           END SELECT
+        END DO
+     CASE('b')
+        DO ind = 1,IVector
+           SELECT CASE (ind)
+           CASE(1)
+              RVector(ind,:) = (/ONE, ZERO, ZERO/)
+           CASE(2)
+              RVector(ind,:) = (/ZERO, ONE, ZERO/)
+           CASE(3)
+              RVector(ind,:) = (/ZERO, ZERO, ONE/)
+           END SELECT
+        END DO
+     CASE('c')
+     CASE('d')
+     CASE('e')
+     CASE('f')
+     CASE('g')
+     CASE('h')
+     CASE('i')
+     CASE('j')
+     CASE('k')
+     CASE DEFAULT
+        PRINT*,"---------------------------------------"
+        PRINT*,"This Wyckoff Symbol for this space group is not yet implemented"
+        PRINT*,"You can correct this in symmetry.f90"
+        PRINT*,"---------------------------------------"     
+     END SELECT
 !!$  CASE(137)
 !!$  CASE(138)
 !!$  CASE(139)
