@@ -64,6 +64,13 @@ SUBROUTINE GMatrixInitialisation (IErr)
         RgMatMag(ind,jnd)= SQRT(DOT_PRODUCT(RgMatMat(ind,jnd,:),RgMatMat(ind,jnd,:)))
      ENDDO
   ENDDO
+
+  CALL Message("GMatrixInitialisation",IInfo+IDebug,IErr,MessageVariable="RgMatMatX", &
+       RMatrix=RgMatMat(:,:,1))
+  CALL Message("GMatrixInitialisation",IInfo+IDebug,IErr,MessageVariable="RgMatMatY", &
+       RMatrix=RgMatMat(:,:,2))
+  CALL Message("GMatrixInitialisation",IInfo+IDebug,IErr,MessageVariable="RgMatMatZ", &
+       RMatrix=RgMatMat(:,:,2))
    
   RgMatMag = RgMatMag/TWOPI
   
@@ -393,3 +400,64 @@ SUBROUTINE StructureFactorsWithAbsorptionDetermination(IErr)
   
 END SUBROUTINE StructureFactorsWithAbsorptionDetermination
   
+SUBROUTINE OutputUgs
+
+  USE MyNumbers
+  USE WriteToScreen
+  
+  USE CConst; USE IConst
+  USE IPara; USE RPara; USE CPara
+  USE BlochPara
+
+  USE IChannels
+
+  USE MPI
+  USE MyMPI
+
+  IMPLICIT NONE
+
+  INTEGER(IKIND) :: &
+       ind, INsquaredReflections,IIndexTemp
+
+  REAL(RKIND) :: &
+       RUgList
+
+  INsquaredReflections = NReflections*NReflections
+
+  CUgMatDummy=CUgmat
+
+!!$  Loop which extracts the indexes and values of the UgMatrix
+!!$  It then uses the indexes to extract the g-vectors and magnitudes from
+!!$  RgMatMat and RgMatMag
+!!$  Save them into a 2D matrix called RUgList.
+!!$  First two columns are the indexes of the Ug,
+!!$  third is the Real part of the Ug, fourth is the Imaginary part
+!!$  fifth:seventh is the g-vector components, eighth is the g-vector magnitude
+  DO ind = 1:INsquaredReflections
+
+     ITempIndex(1:2)=MAXLOC(CUGMatDummy)
+
+     !Extract indexes and values of the maximum value of the UgMatrix
+     RUgList(ind,1:2) = REAL(ITempIndex,RKIND)
+     RUgList(ind,3) = REAL(MAXVAL(CUGMatDummy),RKIND)
+     RUgList(ind,4) = AIMAG(MAXVAL(CUGMatDummy))
+
+     !check to make sure we have an Nreflection by NReflection UgMatrix
+     !*Error Message Required in if statement*
+     IF (RUgList(ind,3).EQ.NEGHUGE) THEN
+        EXIT
+     END IF
+
+     !Set the current Ug value to a really low number (NEGHUGE)
+     CUgMatDummy(RUgList(ind,1),RUgList(ind,2)) = CMPLX(NEGHUGE)
+     
+     !Save the corresponding g-vector and magnitude into UgList
+     RUgList(ind,5:7)=RgMatMat(ITempIndex(1),ITempIndex(2),:)
+     RUgList(ind,8)=RgMatMag(ITempIndex(1),ITempIndex(2))
+
+  END DO
+  
+  CALL Message("OutputUgs",IInfo,IErr,MessageVariable="RUgList",RMatrix=RUgList)
+
+END SUBROUTINE OutputUgs
+     
